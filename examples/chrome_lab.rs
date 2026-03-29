@@ -1,7 +1,9 @@
 use iced::widget::{button, checkbox, column, container, pick_list, row, text};
 use iced::{Color, Element, Length, Size, Subscription, Task, application, window};
 
-use iced_window_chrome::{ChromeSettings, WindowCornerPreference, WindowsCapabilities};
+use iced_window_chrome::{
+    ChromeSettings, MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsCapabilities,
+};
 
 const WINDOW_CORNER_CHOICES: [WindowCornerChoice; 4] = [
     WindowCornerChoice::SystemDefault,
@@ -36,6 +38,13 @@ const MACOS_TRAFFIC_LIGHT_OFFSET_CHOICES: [MacosTrafficLightOffsetChoice; 7] = [
     MacosTrafficLightOffsetChoice::DropSmall,
     MacosTrafficLightOffsetChoice::DropMedium,
     MacosTrafficLightOffsetChoice::DropLarge,
+];
+
+const MACOS_SEPARATOR_STYLE_CHOICES: [MacosSeparatorStyleChoice; 4] = [
+    MacosSeparatorStyleChoice::SystemDefault,
+    MacosSeparatorStyleChoice::Hidden,
+    MacosSeparatorStyleChoice::Line,
+    MacosSeparatorStyleChoice::Shadow,
 ];
 
 fn main() -> iced::Result {
@@ -75,6 +84,7 @@ enum Message {
     MacosFullsize(bool),
     MacosTitlebarHeight(MacosTitlebarHeightChoice),
     MacosTrafficLightOffset(MacosTrafficLightOffsetChoice),
+    MacosSeparatorStyle(MacosSeparatorStyleChoice),
 }
 
 #[derive(Debug, Clone)]
@@ -172,6 +182,10 @@ fn update(state: &mut ChromeLab, message: Message) -> Task<Message> {
         }
         Message::MacosTrafficLightOffset(value) => {
             state.chrome.macos.traffic_light_offset_y = value.into_setting();
+            reapply(state)
+        }
+        Message::MacosSeparatorStyle(value) => {
+            state.chrome.macos.titlebar_separator_style = value.into_setting();
             reapply(state)
         }
     }
@@ -318,6 +332,18 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         checkbox(state.chrome.macos.fullsize_content_view)
             .label("Full-size content view")
             .on_toggle(Message::MacosFullsize),
+        row![
+            text("Separator").width(Length::Fill),
+            pick_list(
+                MACOS_SEPARATOR_STYLE_CHOICES,
+                Some(MacosSeparatorStyleChoice::from_setting(
+                    state.chrome.macos.titlebar_separator_style
+                )),
+                Message::MacosSeparatorStyle,
+            )
+            .width(180),
+        ]
+        .spacing(12),
         if state.chrome.macos.titlebar || state.chrome.macos.traffic_lights {
             row![
                 text("Titlebar height").width(Length::Fill),
@@ -590,6 +616,45 @@ impl std::fmt::Display for MacosTrafficLightOffsetChoice {
             Self::DropSmall => "+6 pt",
             Self::DropMedium => "+12 pt",
             Self::DropLarge => "+18 pt",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacosSeparatorStyleChoice {
+    SystemDefault,
+    Hidden,
+    Line,
+    Shadow,
+}
+
+impl MacosSeparatorStyleChoice {
+    fn from_setting(value: Option<MacosTitlebarSeparatorStyle>) -> Self {
+        match value {
+            Some(MacosTitlebarSeparatorStyle::None) => Self::Hidden,
+            Some(MacosTitlebarSeparatorStyle::Line) => Self::Line,
+            Some(MacosTitlebarSeparatorStyle::Shadow) => Self::Shadow,
+            Some(MacosTitlebarSeparatorStyle::Automatic) | None => Self::SystemDefault,
+        }
+    }
+
+    fn into_setting(self) -> Option<MacosTitlebarSeparatorStyle> {
+        match self {
+            Self::SystemDefault => None,
+            Self::Hidden => Some(MacosTitlebarSeparatorStyle::None),
+            Self::Line => Some(MacosTitlebarSeparatorStyle::Line),
+            Self::Shadow => Some(MacosTitlebarSeparatorStyle::Shadow),
+        }
+    }
+}
+
+impl std::fmt::Display for MacosSeparatorStyleChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SystemDefault => "System default",
+            Self::Hidden => "Hidden",
+            Self::Line => "Line",
+            Self::Shadow => "Shadow",
         })
     }
 }

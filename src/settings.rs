@@ -42,6 +42,15 @@ pub enum WindowCornerPreference {
     RoundSmall,
 }
 
+/// Native macOS titlebar separator style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MacosTitlebarSeparatorStyle {
+    Automatic,
+    None,
+    Line,
+    Shadow,
+}
+
 /// Native Windows window chrome settings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowsChromeSettings {
@@ -90,6 +99,7 @@ pub struct MacosChromeSettings {
     pub fullsize_content_view: bool,
     pub titlebar_height: Option<f64>,
     pub traffic_light_offset_y: Option<f64>,
+    pub titlebar_separator_style: Option<MacosTitlebarSeparatorStyle>,
 }
 
 impl Default for MacosChromeSettings {
@@ -102,6 +112,7 @@ impl Default for MacosChromeSettings {
             fullsize_content_view: false,
             titlebar_height: None,
             traffic_light_offset_y: None,
+            titlebar_separator_style: None,
         }
     }
 }
@@ -115,6 +126,7 @@ impl Hash for MacosChromeSettings {
         self.fullsize_content_view.hash(state);
         hash_f64(self.titlebar_height, state);
         hash_f64(self.traffic_light_offset_y, state);
+        self.titlebar_separator_style.hash(state);
     }
 }
 

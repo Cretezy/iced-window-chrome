@@ -1,4 +1,4 @@
-use crate::{ChromeSettings, Error, MacosChromeSettings, Result};
+use crate::{ChromeSettings, Error, MacosChromeSettings, MacosTitlebarSeparatorStyle, Result};
 
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
@@ -108,10 +108,13 @@ fn uses_fullsize_content_view(chrome: &MacosChromeSettings) -> bool {
 }
 
 fn titlebar_separator_style(chrome: &MacosChromeSettings) -> NSTitlebarSeparatorStyle {
-    if chrome.titlebar_transparent || !chrome.titlebar {
-        NSTitlebarSeparatorStyle::None
-    } else {
-        NSTitlebarSeparatorStyle::Automatic
+    match chrome.titlebar_separator_style {
+        Some(MacosTitlebarSeparatorStyle::Automatic) => NSTitlebarSeparatorStyle::Automatic,
+        Some(MacosTitlebarSeparatorStyle::None) => NSTitlebarSeparatorStyle::None,
+        Some(MacosTitlebarSeparatorStyle::Line) => NSTitlebarSeparatorStyle::Line,
+        Some(MacosTitlebarSeparatorStyle::Shadow) => NSTitlebarSeparatorStyle::Shadow,
+        None if chrome.titlebar_transparent || !chrome.titlebar => NSTitlebarSeparatorStyle::None,
+        None => NSTitlebarSeparatorStyle::Automatic,
     }
 }
 

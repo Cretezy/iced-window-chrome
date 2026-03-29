@@ -22,8 +22,8 @@ use iced::{Subscription, Task, window};
 use std::fmt;
 
 pub use settings::{
-    CaptionButtons, ChromeSettings, MacosChromeSettings, WindowCornerPreference,
-    WindowsChromeSettings,
+    CaptionButtons, ChromeSettings, MacosChromeSettings, MacosTitlebarSeparatorStyle,
+    WindowCornerPreference, WindowsChromeSettings,
 };
 
 /// The current Windows runtime version.
