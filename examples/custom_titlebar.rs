@@ -21,13 +21,23 @@ const MIN_WINDOW_HEIGHT: f32 = 520.0;
 fn main() -> iced::Result {
     application(CustomTitlebarDemo::boot, update, view)
         .title(title)
-        .window(window::Settings {
-            size: iced::Size::new(1040.0, 760.0),
-            min_size: Some(iced::Size::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)),
-            ..window::Settings::default()
-        })
+        .window(window_settings())
         .subscription(subscription)
         .run()
+}
+
+fn window_settings() -> window::Settings {
+    let mut settings = window::Settings {
+        size: iced::Size::new(1040.0, 760.0),
+        min_size: Some(iced::Size::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)),
+        ..window::Settings::default()
+    };
+
+    if cfg!(target_os = "windows") {
+        settings.decorations = false;
+    }
+
+    settings
 }
 
 fn title(_: &CustomTitlebarDemo) -> String {
@@ -123,7 +133,7 @@ fn subscription(state: &CustomTitlebarDemo) -> Subscription<Message> {
 
 fn view(state: &CustomTitlebarDemo) -> Element<'_, Message> {
     let shell: Element<'_, Message> = if state.platform.uses_custom_resize_handles() {
-        x11_shell(state)
+        custom_resize_shell(state)
     } else {
         column![titlebar(state), content(state)]
             .width(Length::Fill)
@@ -138,18 +148,18 @@ fn view(state: &CustomTitlebarDemo) -> Element<'_, Message> {
         .into()
 }
 
-fn x11_shell(state: &CustomTitlebarDemo) -> Element<'_, Message> {
+fn custom_resize_shell(state: &CustomTitlebarDemo) -> Element<'_, Message> {
     let base = column![titlebar(state), content(state)]
         .width(Length::Fill)
         .height(Length::Fill);
 
-    stack![base, x11_resize_overlay()]
+    stack![base, custom_resize_overlay()]
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
 }
 
-fn x11_resize_overlay() -> Element<'static, Message> {
+fn custom_resize_overlay() -> Element<'static, Message> {
     let gutter = Length::Fixed(X11_RESIZE_GUTTER);
 
     column![
@@ -365,7 +375,7 @@ fn titlebar(state: &CustomTitlebarDemo) -> Element<'_, Message> {
             .height(Length::Fill),
     )
     .height(TITLEBAR_HEIGHT)
-    .padding([10, 18])
+    .padding([0, 18])
     .style(|_| titlebar_style())
     .into()
 }
@@ -402,7 +412,7 @@ fn content(state: &CustomTitlebarDemo) -> Element<'_, Message> {
 fn hero_card(state: &CustomTitlebarDemo) -> Element<'_, Message> {
     let summary = match state.platform {
         PlatformFlavor::Windows => {
-            "Windows hides the caption, keeps the resizable border, and uses custom caption buttons."
+            "Windows uses a frameless window, keeps native snap behavior, and adds invisible resize handles around the custom titlebar shell."
         }
         PlatformFlavor::Macos => {
             "macOS keeps native traffic lights, shifts the layout right, and uses a taller transparent titlebar."
@@ -632,14 +642,6 @@ impl PlatformFlavor {
 
         match self {
             Self::Windows => {
-                chrome.windows.caption = false;
-                chrome.windows.border = true;
-                chrome.windows.buttons = CaptionButtons {
-                    close: false,
-                    minimize: false,
-                    maximize: false,
-                };
-
                 if let Some(capabilities) = current_windows_capabilities() {
                     if capabilities.supports_dwm_visuals() {
                         chrome.windows.corner_preference = Some(WindowCornerPreference::Round);
@@ -686,7 +688,7 @@ impl PlatformFlavor {
 
     fn header_note(self) -> &'static str {
         match self {
-            Self::Windows => "custom drag bar + native resize edge",
+            Self::Windows => "custom drag bar + resize overlay",
             Self::Macos => "native traffic lights preserved",
             Self::LinuxX11 => "fully custom header + resize overlay",
             Self::LinuxWayland => "header only",
@@ -697,7 +699,7 @@ impl PlatformFlavor {
     fn native_edges(self) -> &'static str {
         match self {
             Self::Windows => {
-                "The Win32 resizable frame stays native. Only the caption area is replaced."
+                "Windows still handles the actual move, resize, and snap behavior, but the edge hit regions are provided by the app."
             }
             Self::Macos => {
                 "The traffic lights stay native and keep their hover behavior. The content is shifted right so the header does not collide with them."
@@ -715,7 +717,7 @@ impl PlatformFlavor {
     fn custom_layers(self) -> &'static str {
         match self {
             Self::Windows => {
-                "Drag surface, app branding, tabs, and caption buttons are drawn in iced."
+                "Drag surface, app branding, tabs, caption buttons, and invisible resize handles are drawn in iced."
             }
             Self::Macos => {
                 "The thick titlebar is drawn in iced while AppKit still owns the traffic lights."
@@ -739,7 +741,7 @@ impl PlatformFlavor {
     }
 
     fn uses_custom_resize_handles(self) -> bool {
-        matches!(self, Self::LinuxX11)
+        matches!(self, Self::Windows | Self::LinuxX11)
     }
 
     fn leading_inset(self) -> Length {
