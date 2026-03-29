@@ -1,4 +1,7 @@
-use crate::{ChromeSettings, Error, Result, WindowCornerPreference, WindowsChromeSettings};
+use crate::{
+    ChromeSettings, Error, Result, WindowCornerPreference, WindowsCapabilities,
+    WindowsChromeSettings, WindowsVersion,
+};
 
 use iced::Color;
 use raw_window_handle::Win32WindowHandle;
@@ -7,11 +10,13 @@ use std::ffi::c_void;
 use std::mem::size_of;
 use std::ptr::null_mut;
 
-use windows_sys::Win32::Foundation::{GetLastError, HWND, SetLastError};
+use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
+use windows_sys::Win32::Foundation::{GetLastError, HWND, STATUS_SUCCESS, SetLastError};
 use windows_sys::Win32::Graphics::Dwm::{
     DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE,
     DwmSetWindowAttribute,
 };
+use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     DrawMenuBar, EnableMenuItem, GWL_STYLE, GetSystemMenu, GetWindowLongPtrW, MF_BYCOMMAND,
     MF_ENABLED, MF_GRAYED, SC_CLOSE, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
@@ -25,6 +30,33 @@ const DWMWCP_DEFAULT: u32 = 0;
 const DWMWCP_DONOTROUND: u32 = 1;
 const DWMWCP_ROUND: u32 = 2;
 const DWMWCP_ROUNDSMALL: u32 = 3;
+
+pub fn current_capabilities() -> Option<WindowsCapabilities> {
+    let mut info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: size_of::<OSVERSIONINFOW>() as u32,
+        ..OSVERSIONINFOW::default()
+    };
+
+    let status = unsafe { RtlGetVersion(&mut info) };
+    if status != STATUS_SUCCESS {
+        return None;
+    }
+
+    let version = WindowsVersion {
+        major: info.dwMajorVersion,
+        minor: info.dwMinorVersion,
+        build: info.dwBuildNumber,
+    };
+    let supports_dwm_visuals = version.is_windows_11_or_newer();
+
+    Some(WindowsCapabilities {
+        version,
+        corner_preference: supports_dwm_visuals,
+        border_color: supports_dwm_visuals,
+        title_background_color: supports_dwm_visuals,
+        title_text_color: supports_dwm_visuals,
+    })
+}
 
 pub fn apply(handle: Win32WindowHandle, settings: &ChromeSettings) -> Result<()> {
     let hwnd = handle.hwnd.get() as HWND;
@@ -102,38 +134,50 @@ unsafe fn apply_system_menu(hwnd: HWND, settings: &WindowsChromeSettings) -> Res
 }
 
 unsafe fn apply_dwm_attributes(hwnd: HWND, settings: &WindowsChromeSettings) -> Result<()> {
+    let Some(capabilities) = current_capabilities() else {
+        return Ok(());
+    };
+
     let corner_preference = settings
         .corner_preference
         .unwrap_or(WindowCornerPreference::Default);
-    let corner_value = match corner_preference {
-        WindowCornerPreference::Default => DWMWCP_DEFAULT,
-        WindowCornerPreference::DoNotRound => DWMWCP_DONOTROUND,
-        WindowCornerPreference::Round => DWMWCP_ROUND,
-        WindowCornerPreference::RoundSmall => DWMWCP_ROUNDSMALL,
-    };
-    unsafe { set_dwm_attribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE as u32, &corner_value)? };
+    if capabilities.corner_preference {
+        let corner_value = match corner_preference {
+            WindowCornerPreference::Default => DWMWCP_DEFAULT,
+            WindowCornerPreference::DoNotRound => DWMWCP_DONOTROUND,
+            WindowCornerPreference::Round => DWMWCP_ROUND,
+            WindowCornerPreference::RoundSmall => DWMWCP_ROUNDSMALL,
+        };
+        unsafe { set_dwm_attribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE as u32, &corner_value)? };
+    }
 
-    let border_value = if !settings.border {
-        DWMWA_COLOR_NONE
-    } else {
-        settings
-            .border_color
+    if capabilities.border_color {
+        let border_value = if !settings.border {
+            DWMWA_COLOR_NONE
+        } else {
+            settings
+                .border_color
+                .map(colorref)
+                .unwrap_or(DWMWA_COLOR_DEFAULT)
+        };
+        unsafe { set_dwm_attribute(hwnd, DWMWA_BORDER_COLOR as u32, &border_value)? };
+    }
+
+    if capabilities.title_background_color {
+        let title_background = settings
+            .title_background_color
             .map(colorref)
-            .unwrap_or(DWMWA_COLOR_DEFAULT)
-    };
-    unsafe { set_dwm_attribute(hwnd, DWMWA_BORDER_COLOR as u32, &border_value)? };
+            .unwrap_or(DWMWA_COLOR_DEFAULT);
+        unsafe { set_dwm_attribute(hwnd, DWMWA_CAPTION_COLOR as u32, &title_background)? };
+    }
 
-    let title_background = settings
-        .title_background_color
-        .map(colorref)
-        .unwrap_or(DWMWA_COLOR_DEFAULT);
-    unsafe { set_dwm_attribute(hwnd, DWMWA_CAPTION_COLOR as u32, &title_background)? };
-
-    let title_text = settings
-        .title_text_color
-        .map(colorref)
-        .unwrap_or(DWMWA_COLOR_DEFAULT);
-    unsafe { set_dwm_attribute(hwnd, DWMWA_TEXT_COLOR as u32, &title_text)? };
+    if capabilities.title_text_color {
+        let title_text = settings
+            .title_text_color
+            .map(colorref)
+            .unwrap_or(DWMWA_COLOR_DEFAULT);
+        unsafe { set_dwm_attribute(hwnd, DWMWA_TEXT_COLOR as u32, &title_text)? };
+    }
 
     Ok(())
 }

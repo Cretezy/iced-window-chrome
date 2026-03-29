@@ -26,6 +26,47 @@ pub use settings::{
     WindowsChromeSettings,
 };
 
+/// The current Windows runtime version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WindowsVersion {
+    pub major: u32,
+    pub minor: u32,
+    pub build: u32,
+}
+
+impl WindowsVersion {
+    /// Returns `true` for Windows 11 builds and newer.
+    pub fn is_windows_11_or_newer(self) -> bool {
+        self.major > 10 || (self.major == 10 && self.build >= 22_000)
+    }
+}
+
+impl fmt::Display for WindowsVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.build)
+    }
+}
+
+/// Windows runtime support flags for version-dependent chrome features.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WindowsCapabilities {
+    pub version: WindowsVersion,
+    pub corner_preference: bool,
+    pub border_color: bool,
+    pub title_background_color: bool,
+    pub title_text_color: bool,
+}
+
+impl WindowsCapabilities {
+    /// Returns `true` when the Windows 11 DWM visual chrome APIs are available.
+    pub fn supports_dwm_visuals(self) -> bool {
+        self.corner_preference
+            && self.border_color
+            && self.title_background_color
+            && self.title_text_color
+    }
+}
+
 /// Convenience result type for native patch operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -115,6 +156,18 @@ pub fn handle_result(event: Event) -> Task<Result<()>> {
     match event {
         Event::ApplyToWindow { id, settings } => apply_result(id, settings),
     }
+}
+
+/// Returns Windows runtime capabilities when running on Windows.
+#[cfg(target_os = "windows")]
+pub fn current_windows_capabilities() -> Option<WindowsCapabilities> {
+    windows::current_capabilities()
+}
+
+/// Returns Windows runtime capabilities when running on Windows.
+#[cfg(not(target_os = "windows"))]
+pub fn current_windows_capabilities() -> Option<WindowsCapabilities> {
+    None
 }
 
 #[cfg(target_os = "windows")]

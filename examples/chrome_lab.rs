@@ -1,7 +1,7 @@
 use iced::widget::{button, checkbox, column, container, pick_list, row, text};
 use iced::{Color, Element, Length, Size, Subscription, Task, application, window};
 
-use iced_window_chrome::{ChromeSettings, WindowCornerPreference};
+use iced_window_chrome::{ChromeSettings, WindowCornerPreference, WindowsCapabilities};
 
 const WINDOW_CORNER_CHOICES: [WindowCornerChoice; 4] = [
     WindowCornerChoice::SystemDefault,
@@ -59,12 +59,14 @@ enum Message {
 #[derive(Debug, Clone)]
 struct ChromeLab {
     chrome: ChromeSettings,
+    windows_capabilities: Option<WindowsCapabilities>,
 }
 
 impl ChromeLab {
     fn boot() -> (Self, Task<Message>) {
         let state = Self {
             chrome: ChromeSettings::default(),
+            windows_capabilities: iced_window_chrome::current_windows_capabilities(),
         };
 
         (
@@ -151,8 +153,103 @@ fn subscription(state: &ChromeLab) -> Subscription<Message> {
 }
 
 fn view(state: &ChromeLab) -> Element<'_, Message> {
+    let windows_visuals_supported = state
+        .windows_capabilities
+        .map(WindowsCapabilities::supports_dwm_visuals)
+        .unwrap_or(false);
+
+    let windows_visuals_note = state
+        .windows_capabilities
+        .map(windows_support_note)
+        .unwrap_or("Windows-only runtime detection unavailable on this host".to_string());
+
+    let corner_row: Element<'_, Message> = if windows_visuals_supported {
+        row![
+            text("Corner rounding").width(Length::Fill),
+            pick_list(
+                WINDOW_CORNER_CHOICES,
+                Some(WindowCornerChoice::from_setting(
+                    state.chrome.windows.corner_preference
+                )),
+                Message::WindowsCorner,
+            )
+            .width(180),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        unsupported_setting_row(
+            "Corner rounding",
+            "Windows 11 DWM visual chrome APIs are required",
+        )
+    };
+
+    let border_color_row: Element<'_, Message> = if windows_visuals_supported {
+        row![
+            text("Border color").width(Length::Fill),
+            pick_list(
+                WINDOWS_COLOR_CHOICES,
+                Some(WindowsColorChoice::from_setting(
+                    state.chrome.windows.border_color
+                )),
+                Message::WindowsBorderColor,
+            )
+            .width(180),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        unsupported_setting_row(
+            "Border color",
+            "Windows 11 DWM visual chrome APIs are required",
+        )
+    };
+
+    let title_background_row: Element<'_, Message> = if windows_visuals_supported {
+        row![
+            text("Title background").width(Length::Fill),
+            pick_list(
+                WINDOWS_COLOR_CHOICES,
+                Some(WindowsColorChoice::from_setting(
+                    state.chrome.windows.title_background_color
+                )),
+                Message::WindowsTitleBackgroundColor,
+            )
+            .width(180),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        unsupported_setting_row(
+            "Title background",
+            "Windows 11 DWM visual chrome APIs are required",
+        )
+    };
+
+    let title_text_row: Element<'_, Message> = if windows_visuals_supported {
+        row![
+            text("Title text").width(Length::Fill),
+            pick_list(
+                WINDOWS_COLOR_CHOICES,
+                Some(WindowsColorChoice::from_setting(
+                    state.chrome.windows.title_text_color
+                )),
+                Message::WindowsTitleTextColor,
+            )
+            .width(180),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        unsupported_setting_row(
+            "Title text",
+            "Windows 11 DWM visual chrome APIs are required",
+        )
+    };
+
     let windows = column![
         text("Windows").size(24),
+        text(windows_visuals_note),
         checkbox(state.chrome.windows.caption)
             .label("Caption")
             .on_toggle(Message::WindowsCaption),
@@ -168,54 +265,10 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         checkbox(state.chrome.windows.buttons.maximize)
             .label("Maximize button")
             .on_toggle(Message::WindowsMaximize),
-        row![
-            text("Corner rounding").width(Length::Fill),
-            pick_list(
-                WINDOW_CORNER_CHOICES,
-                Some(WindowCornerChoice::from_setting(
-                    state.chrome.windows.corner_preference
-                )),
-                Message::WindowsCorner,
-            )
-            .width(180),
-        ]
-        .spacing(12),
-        row![
-            text("Border color").width(Length::Fill),
-            pick_list(
-                WINDOWS_COLOR_CHOICES,
-                Some(WindowsColorChoice::from_setting(
-                    state.chrome.windows.border_color
-                )),
-                Message::WindowsBorderColor,
-            )
-            .width(180),
-        ]
-        .spacing(12),
-        row![
-            text("Title background").width(Length::Fill),
-            pick_list(
-                WINDOWS_COLOR_CHOICES,
-                Some(WindowsColorChoice::from_setting(
-                    state.chrome.windows.title_background_color
-                )),
-                Message::WindowsTitleBackgroundColor,
-            )
-            .width(180),
-        ]
-        .spacing(12),
-        row![
-            text("Title text").width(Length::Fill),
-            pick_list(
-                WINDOWS_COLOR_CHOICES,
-                Some(WindowsColorChoice::from_setting(
-                    state.chrome.windows.title_text_color
-                )),
-                Message::WindowsTitleTextColor,
-            )
-            .width(180),
-        ]
-        .spacing(12),
+        corner_row,
+        border_color_row,
+        title_background_row,
+        title_text_row,
     ]
     .spacing(12);
 
@@ -266,6 +319,26 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
 
 fn reapply(state: &ChromeLab) -> Task<Message> {
     iced_window_chrome::apply_to_latest(state.chrome.clone())
+}
+
+fn unsupported_setting_row<'a, Message: 'a>(label: &'a str, note: &'a str) -> Element<'a, Message> {
+    row![text(label).width(Length::Fill), text(note),]
+        .spacing(12)
+        .into()
+}
+
+fn windows_support_note(capabilities: WindowsCapabilities) -> String {
+    if capabilities.supports_dwm_visuals() {
+        format!(
+            "Detected Windows {}. Windows 11 DWM visual chrome controls are enabled.",
+            capabilities.version
+        )
+    } else {
+        format!(
+            "Detected Windows {}. Corner rounding and DWM title/border colors are Windows 11-only, so those controls are disabled.",
+            capabilities.version
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
