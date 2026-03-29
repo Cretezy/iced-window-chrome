@@ -19,6 +19,25 @@ const WINDOWS_COLOR_CHOICES: [WindowsColorChoice; 6] = [
     WindowsColorChoice::White,
 ];
 
+const MACOS_TITLEBAR_HEIGHT_CHOICES: [MacosTitlebarHeightChoice; 6] = [
+    MacosTitlebarHeightChoice::SystemDefault,
+    MacosTitlebarHeightChoice::Compact,
+    MacosTitlebarHeightChoice::Regular,
+    MacosTitlebarHeightChoice::Tall,
+    MacosTitlebarHeightChoice::Hero,
+    MacosTitlebarHeightChoice::Huge,
+];
+
+const MACOS_TRAFFIC_LIGHT_OFFSET_CHOICES: [MacosTrafficLightOffsetChoice; 7] = [
+    MacosTrafficLightOffsetChoice::SystemDefault,
+    MacosTrafficLightOffsetChoice::LiftLarge,
+    MacosTrafficLightOffsetChoice::LiftSmall,
+    MacosTrafficLightOffsetChoice::Aligned,
+    MacosTrafficLightOffsetChoice::DropSmall,
+    MacosTrafficLightOffsetChoice::DropMedium,
+    MacosTrafficLightOffsetChoice::DropLarge,
+];
+
 fn main() -> iced::Result {
     application(ChromeLab::boot, update, view)
         .title(title)
@@ -54,6 +73,8 @@ enum Message {
     MacosTrafficLights(bool),
     MacosTransparent(bool),
     MacosFullsize(bool),
+    MacosTitlebarHeight(MacosTitlebarHeightChoice),
+    MacosTrafficLightOffset(MacosTrafficLightOffsetChoice),
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +164,14 @@ fn update(state: &mut ChromeLab, message: Message) -> Task<Message> {
         }
         Message::MacosFullsize(value) => {
             state.chrome.macos.fullsize_content_view = value;
+            reapply(state)
+        }
+        Message::MacosTitlebarHeight(value) => {
+            state.chrome.macos.titlebar_height = value.into_setting();
+            reapply(state)
+        }
+        Message::MacosTrafficLightOffset(value) => {
+            state.chrome.macos.traffic_light_offset_y = value.into_setting();
             reapply(state)
         }
     }
@@ -289,6 +318,43 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         checkbox(state.chrome.macos.fullsize_content_view)
             .label("Full-size content view")
             .on_toggle(Message::MacosFullsize),
+        if state.chrome.macos.titlebar {
+            row![
+                text("Titlebar height").width(Length::Fill),
+                pick_list(
+                    MACOS_TITLEBAR_HEIGHT_CHOICES,
+                    Some(MacosTitlebarHeightChoice::from_setting(
+                        state.chrome.macos.titlebar_height
+                    )),
+                    Message::MacosTitlebarHeight,
+                )
+                .width(180),
+            ]
+            .spacing(12)
+            .into()
+        } else {
+            unsupported_setting_row("Titlebar height", "Ignored while the titlebar is disabled")
+        },
+        if state.chrome.macos.titlebar {
+            row![
+                text("Traffic light offset").width(Length::Fill),
+                pick_list(
+                    MACOS_TRAFFIC_LIGHT_OFFSET_CHOICES,
+                    Some(MacosTrafficLightOffsetChoice::from_setting(
+                        state.chrome.macos.traffic_light_offset_y
+                    )),
+                    Message::MacosTrafficLightOffset,
+                )
+                .width(180),
+            ]
+            .spacing(12)
+            .into()
+        } else {
+            unsupported_setting_row(
+                "Traffic light offset",
+                "Ignored while the titlebar is disabled",
+            )
+        },
     ]
     .spacing(12);
 
@@ -425,4 +491,106 @@ impl std::fmt::Display for WindowsColorChoice {
             Self::White => "White",
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacosTitlebarHeightChoice {
+    SystemDefault,
+    Compact,
+    Regular,
+    Tall,
+    Hero,
+    Huge,
+}
+
+impl MacosTitlebarHeightChoice {
+    fn from_setting(value: Option<f64>) -> Self {
+        match value {
+            Some(value) if approx_eq(value, 28.0) => Self::Compact,
+            Some(value) if approx_eq(value, 36.0) => Self::Regular,
+            Some(value) if approx_eq(value, 48.0) => Self::Tall,
+            Some(value) if approx_eq(value, 60.0) => Self::Hero,
+            Some(value) if approx_eq(value, 72.0) => Self::Huge,
+            _ => Self::SystemDefault,
+        }
+    }
+
+    fn into_setting(self) -> Option<f64> {
+        match self {
+            Self::SystemDefault => None,
+            Self::Compact => Some(28.0),
+            Self::Regular => Some(36.0),
+            Self::Tall => Some(48.0),
+            Self::Hero => Some(60.0),
+            Self::Huge => Some(72.0),
+        }
+    }
+}
+
+impl std::fmt::Display for MacosTitlebarHeightChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SystemDefault => "System default",
+            Self::Compact => "28 pt",
+            Self::Regular => "36 pt",
+            Self::Tall => "48 pt",
+            Self::Hero => "60 pt",
+            Self::Huge => "72 pt",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacosTrafficLightOffsetChoice {
+    SystemDefault,
+    LiftLarge,
+    LiftSmall,
+    Aligned,
+    DropSmall,
+    DropMedium,
+    DropLarge,
+}
+
+impl MacosTrafficLightOffsetChoice {
+    fn from_setting(value: Option<f64>) -> Self {
+        match value {
+            Some(value) if approx_eq(value, -12.0) => Self::LiftLarge,
+            Some(value) if approx_eq(value, -6.0) => Self::LiftSmall,
+            Some(value) if approx_eq(value, 0.0) => Self::Aligned,
+            Some(value) if approx_eq(value, 6.0) => Self::DropSmall,
+            Some(value) if approx_eq(value, 12.0) => Self::DropMedium,
+            Some(value) if approx_eq(value, 18.0) => Self::DropLarge,
+            _ => Self::SystemDefault,
+        }
+    }
+
+    fn into_setting(self) -> Option<f64> {
+        match self {
+            Self::SystemDefault => None,
+            Self::LiftLarge => Some(-12.0),
+            Self::LiftSmall => Some(-6.0),
+            Self::Aligned => Some(0.0),
+            Self::DropSmall => Some(6.0),
+            Self::DropMedium => Some(12.0),
+            Self::DropLarge => Some(18.0),
+        }
+    }
+}
+
+impl std::fmt::Display for MacosTrafficLightOffsetChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SystemDefault => "System default",
+            Self::LiftLarge => "-12 pt",
+            Self::LiftSmall => "-6 pt",
+            Self::Aligned => "0 pt",
+            Self::DropSmall => "+6 pt",
+            Self::DropMedium => "+12 pt",
+            Self::DropLarge => "+18 pt",
+        })
+    }
+}
+
+fn approx_eq(left: f64, right: f64) -> bool {
+    (left - right).abs() < 0.001
 }
