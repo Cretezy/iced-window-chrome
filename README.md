@@ -2,13 +2,13 @@
 
 Native-only window chrome patches for [`iced`](https://github.com/iced-rs/iced).
 
-This crate stays intentionally small: one library crate, one example app, and a direct runtime integration surface for patching already-created native windows on Windows and macOS while remaining a no-op on Linux.
+This crate stays intentionally small: one library crate, one example app, and a direct runtime integration surface for patching already-created native windows on Windows, macOS, and Linux.
 
 ## Highlights
 
 - Native Windows chrome patching for caption, border, buttons, DWM corner preference, and title colors.
 - Native macOS titlebar patching for title visibility, traffic lights, transparency, full-size content view, accessory-driven titlebar height, and traffic-light offsets.
-- Linux support is explicit best-effort no-op behavior.
+- Native Linux/X11 patching for Motif WM decorations and close/minimize/maximize hints.
 - `iced`-friendly API with `Task` helpers for live windows and a small subscription loop for later-opened windows.
 
 ## Install
@@ -63,7 +63,7 @@ Run the included demo:
 cargo run --example chrome-lab
 ```
 
-The demo lets you toggle Windows and macOS settings, patch the latest live window, and open extra windows that are patched through the subscription flow.
+The demo lets you toggle Windows, macOS, and Linux settings, patch the latest live window, and open extra windows that are patched through the subscription flow.
 
 ## Platform Support
 
@@ -71,7 +71,7 @@ The demo lets you toggle Windows and macOS settings, patch the latest live windo
 | --- | --- | --- |
 | Windows | Supported | Native style-bit and DWM patching |
 | macOS | Supported | AppKit titlebar and traffic-light patching |
-| Linux | Best effort | Unsupported settings are no-ops |
+| Linux | Best effort | X11 Motif WM hints for decorations and buttons; Wayland remains a no-op |
 
 ## Development
 

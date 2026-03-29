@@ -11,7 +11,7 @@
 
 mod settings;
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -22,8 +22,8 @@ use iced::{Subscription, Task, window};
 use std::fmt;
 
 pub use settings::{
-    CaptionButtons, ChromeSettings, MacosChromeSettings, MacosTitlebarSeparatorStyle,
-    WindowCornerPreference, WindowsChromeSettings,
+    CaptionButtons, ChromeSettings, LinuxChromeSettings, MacosChromeSettings,
+    MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsChromeSettings,
 };
 
 /// The current Windows runtime version.
@@ -78,6 +78,7 @@ pub enum Error {
     UnsupportedWindowHandle(&'static str),
     Windows(&'static str),
     Macos(&'static str),
+    Linux(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -94,6 +95,7 @@ impl fmt::Display for Error {
             }
             Self::Windows(message) => write!(f, "Windows API error: {message}"),
             Self::Macos(message) => write!(f, "macOS AppKit error: {message}"),
+            Self::Linux(message) => write!(f, "Linux/X11 error: {message}"),
         }
     }
 }
@@ -194,9 +196,27 @@ fn apply_native(window: &dyn iced::window::Window, settings: &ChromeSettings) ->
     }
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn apply_native(_window: &dyn iced::window::Window, settings: &ChromeSettings) -> Result<()> {
-    linux::apply(settings)
+#[cfg(target_os = "linux")]
+fn apply_native(window: &dyn iced::window::Window, settings: &ChromeSettings) -> Result<()> {
+    use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+
+    let window_handle = window.window_handle().map_err(Error::WindowHandle)?;
+    let display_handle = window.display_handle().map_err(Error::WindowHandle)?;
+
+    match (display_handle.as_raw(), window_handle.as_raw()) {
+        (RawDisplayHandle::Xlib(display), RawWindowHandle::Xlib(handle)) => {
+            linux::apply_xlib(display, handle, settings)
+        }
+        (RawDisplayHandle::Wayland(_), RawWindowHandle::Wayland(_)) => {
+            linux::apply_wayland(settings)
+        }
+        _ => Err(Error::UnsupportedWindowHandle("non-Xlib Linux")),
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn apply_native(_window: &dyn iced::window::Window, _settings: &ChromeSettings) -> Result<()> {
+    Ok(())
 }
 
 fn map_open_event((settings, id): (ChromeSettings, window::Id)) -> Event {

@@ -18,5 +18,5 @@ cargo check --all-targets
 ## Notes
 
 - Windows and macOS behavior still depends on manual native validation.
-- Linux behavior is intentionally no-op for unsupported chrome shaping.
+- Linux behavior currently targets X11 Motif WM hints; Wayland remains no-op.
 - Keep the crate surface small and runner-free unless there is a strong compatibility reason to expand it.

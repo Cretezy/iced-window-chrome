@@ -1,4 +1,4 @@
-use iced::widget::{button, checkbox, column, container, pick_list, row, text};
+use iced::widget::{button, checkbox, column, container, pick_list, row, scrollable, text};
 use iced::{Color, Element, Length, Size, Subscription, Task, application, window};
 
 use iced_window_chrome::{
@@ -85,6 +85,10 @@ enum Message {
     MacosTitlebarHeight(MacosTitlebarHeightChoice),
     MacosTrafficLightOffset(MacosTrafficLightOffsetChoice),
     MacosSeparatorStyle(MacosSeparatorStyleChoice),
+    LinuxDecorations(bool),
+    LinuxClose(bool),
+    LinuxMinimize(bool),
+    LinuxMaximize(bool),
 }
 
 #[derive(Debug, Clone)]
@@ -186,6 +190,22 @@ fn update(state: &mut ChromeLab, message: Message) -> Task<Message> {
         }
         Message::MacosSeparatorStyle(value) => {
             state.chrome.macos.titlebar_separator_style = value.into_setting();
+            reapply(state)
+        }
+        Message::LinuxDecorations(value) => {
+            state.chrome.linux.decorations = value;
+            reapply(state)
+        }
+        Message::LinuxClose(value) => {
+            state.chrome.linux.buttons.close = value;
+            reapply(state)
+        }
+        Message::LinuxMinimize(value) => {
+            state.chrome.linux.buttons.minimize = value;
+            reapply(state)
+        }
+        Message::LinuxMaximize(value) => {
+            state.chrome.linux.buttons.maximize = value;
             reapply(state)
         }
     }
@@ -387,6 +407,24 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
     ]
     .spacing(12);
 
+    let linux = column![
+        text("Linux").size(24),
+        text("X11-only Motif WM hints. Wayland currently ignores these controls."),
+        checkbox(state.chrome.linux.decorations)
+            .label("Decorations")
+            .on_toggle(Message::LinuxDecorations),
+        checkbox(state.chrome.linux.buttons.close)
+            .label("Close button")
+            .on_toggle(Message::LinuxClose),
+        checkbox(state.chrome.linux.buttons.minimize)
+            .label("Minimize button")
+            .on_toggle(Message::LinuxMinimize),
+        checkbox(state.chrome.linux.buttons.maximize)
+            .label("Maximize button")
+            .on_toggle(Message::LinuxMaximize),
+    ]
+    .spacing(12);
+
     let controls = row![
         button("Apply to latest window").on_press(Message::ApplyNow),
         button("Open extra window").on_press(Message::OpenWindow),
@@ -402,11 +440,12 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         .width(Length::Fill),
         controls,
         row![windows.width(Length::Fill), macos.width(Length::Fill)].spacing(32),
+        linux.width(Length::Fill),
     ]
     .spacing(24)
     .padding(24);
 
-    container(content)
+    container(scrollable(content).width(Length::Fill).height(Length::Fill))
         .width(Length::Fill)
         .height(Length::Fill)
         .into()

@@ -6,12 +6,14 @@ use std::hash::{Hash, Hasher};
 pub struct ChromeSettings {
     pub windows: WindowsChromeSettings,
     pub macos: MacosChromeSettings,
+    pub linux: LinuxChromeSettings,
 }
 
 impl Hash for ChromeSettings {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.windows.hash(state);
         self.macos.hash(state);
+        self.linux.hash(state);
     }
 }
 
@@ -49,6 +51,29 @@ pub enum MacosTitlebarSeparatorStyle {
     None,
     Line,
     Shadow,
+}
+
+/// Native Linux/X11 window manager chrome settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinuxChromeSettings {
+    pub decorations: bool,
+    pub buttons: CaptionButtons,
+}
+
+impl Default for LinuxChromeSettings {
+    fn default() -> Self {
+        Self {
+            decorations: true,
+            buttons: CaptionButtons::default(),
+        }
+    }
+}
+
+impl Hash for LinuxChromeSettings {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.decorations.hash(state);
+        self.buttons.hash(state);
+    }
 }
 
 /// Native Windows window chrome settings.
