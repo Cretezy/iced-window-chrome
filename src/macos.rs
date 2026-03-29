@@ -70,12 +70,13 @@ fn apply_traffic_lights(window: &NSWindow, settings: &ChromeSettings) {
         if let Some(button) = window.standardWindowButton(button_kind) {
             button.setHidden(!chrome.titlebar || !chrome.traffic_lights);
 
-            if chrome.titlebar && chrome.traffic_lights {
-                if let Some(offset_y) = chrome.traffic_light_offset_y {
-                    let mut frame = button.frame();
-                    frame.origin.y += offset_y as CGFloat;
-                    button.setFrameOrigin(frame.origin);
-                }
+            if chrome.titlebar
+                && chrome.traffic_lights
+                && let Some(offset_y) = chrome.traffic_light_offset_y
+            {
+                let mut frame = button.frame();
+                frame.origin.y += offset_y as CGFloat;
+                button.setFrameOrigin(frame.origin);
             }
         }
     }
