@@ -318,7 +318,7 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         checkbox(state.chrome.macos.fullsize_content_view)
             .label("Full-size content view")
             .on_toggle(Message::MacosFullsize),
-        if state.chrome.macos.titlebar {
+        if state.chrome.macos.titlebar || state.chrome.macos.traffic_lights {
             row![
                 text("Titlebar height").width(Length::Fill),
                 pick_list(
@@ -333,9 +333,12 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
             .spacing(12)
             .into()
         } else {
-            unsupported_setting_row("Titlebar height", "Ignored while the titlebar is disabled")
+            unsupported_setting_row(
+                "Titlebar height",
+                "Ignored while both the titlebar and traffic lights are hidden",
+            )
         },
-        if state.chrome.macos.titlebar {
+        if state.chrome.macos.titlebar || state.chrome.macos.traffic_lights {
             row![
                 text("Traffic light offset").width(Length::Fill),
                 pick_list(
@@ -352,7 +355,7 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         } else {
             unsupported_setting_row(
                 "Traffic light offset",
-                "Ignored while the titlebar is disabled",
+                "Ignored while both the titlebar and traffic lights are hidden",
             )
         },
     ]
