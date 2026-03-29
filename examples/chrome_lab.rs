@@ -239,123 +239,119 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         .map(WindowsCapabilities::supports_system_backdrop)
         .unwrap_or(false);
 
-    let windows_visuals_note = state
-        .windows_capabilities
-        .map(windows_support_note)
-        .unwrap_or("Windows-only runtime detection unavailable on this host".to_string());
-
     let corner_row: Element<'_, Message> = if windows_visuals_supported {
-        row![
-            text("Corner rounding").width(Length::Fill),
+        picker_row(
+            "Corner rounding",
             pick_list(
                 WINDOW_CORNER_CHOICES,
                 Some(WindowCornerChoice::from_setting(
-                    state.chrome.windows.corner_preference
+                    state.chrome.windows.corner_preference,
                 )),
                 Message::WindowsCorner,
             )
-            .width(180),
-        ]
-        .spacing(12)
-        .into()
+            .width(180)
+            .into(),
+        )
     } else {
-        unsupported_setting_row(
-            "Corner rounding",
-            "Windows 11 DWM visual chrome APIs are required",
+        picker_row(
+            "Corner rounding (Win11)",
+            locked_picker(WindowCornerChoice::from_setting(
+                state.chrome.windows.corner_preference,
+            )),
         )
     };
 
     let border_color_row: Element<'_, Message> = if windows_visuals_supported {
-        row![
-            text("Border color").width(Length::Fill),
+        picker_row(
+            "Border color",
             pick_list(
                 WINDOWS_COLOR_CHOICES,
                 Some(WindowsColorChoice::from_setting(
-                    state.chrome.windows.border_color
+                    state.chrome.windows.border_color,
                 )),
                 Message::WindowsBorderColor,
             )
-            .width(180),
-        ]
-        .spacing(12)
-        .into()
+            .width(180)
+            .into(),
+        )
     } else {
-        unsupported_setting_row(
-            "Border color",
-            "Windows 11 DWM visual chrome APIs are required",
+        picker_row(
+            "Border color (Win11)",
+            locked_picker(WindowsColorChoice::from_setting(
+                state.chrome.windows.border_color,
+            )),
         )
     };
 
     let title_background_row: Element<'_, Message> = if windows_visuals_supported {
-        row![
-            text("Title background").width(Length::Fill),
+        picker_row(
+            "Title background",
             pick_list(
                 WINDOWS_COLOR_CHOICES,
                 Some(WindowsColorChoice::from_setting(
-                    state.chrome.windows.title_background_color
+                    state.chrome.windows.title_background_color,
                 )),
                 Message::WindowsTitleBackgroundColor,
             )
-            .width(180),
-        ]
-        .spacing(12)
-        .into()
+            .width(180)
+            .into(),
+        )
     } else {
-        unsupported_setting_row(
-            "Title background",
-            "Windows 11 DWM visual chrome APIs are required",
+        picker_row(
+            "Title background (Win11)",
+            locked_picker(WindowsColorChoice::from_setting(
+                state.chrome.windows.title_background_color,
+            )),
         )
     };
 
     let title_text_row: Element<'_, Message> = if windows_visuals_supported {
-        row![
-            text("Title text").width(Length::Fill),
+        picker_row(
+            "Title text",
             pick_list(
                 WINDOWS_COLOR_CHOICES,
                 Some(WindowsColorChoice::from_setting(
-                    state.chrome.windows.title_text_color
+                    state.chrome.windows.title_text_color,
                 )),
                 Message::WindowsTitleTextColor,
             )
-            .width(180),
-        ]
-        .spacing(12)
-        .into()
+            .width(180)
+            .into(),
+        )
     } else {
-        unsupported_setting_row(
-            "Title text",
-            "Windows 11 DWM visual chrome APIs are required",
+        picker_row(
+            "Title text (Win11)",
+            locked_picker(WindowsColorChoice::from_setting(
+                state.chrome.windows.title_text_color,
+            )),
         )
     };
 
     let backdrop_row: Element<'_, Message> = if windows_backdrop_supported {
-        row![
-            text("Backdrop material").width(Length::Fill),
+        picker_row(
+            "Backdrop material",
             pick_list(
                 WINDOWS_BACKDROP_CHOICES,
                 Some(WindowsBackdropChoice::from_setting(
-                    state.chrome.windows.backdrop
+                    state.chrome.windows.backdrop,
                 )),
                 Message::WindowsBackdrop,
             )
-            .width(180),
-        ]
-        .spacing(12)
-        .into()
+            .width(180)
+            .into(),
+        )
     } else {
-        unsupported_setting_row(
-            "Backdrop material",
-            "Windows 11 Build 22621+ is required for Mica, Acrylic, and Mica Alt",
+        picker_row(
+            "Backdrop material (22621+)",
+            locked_picker(WindowsBackdropChoice::from_setting(
+                state.chrome.windows.backdrop,
+            )),
         )
     };
 
     let windows = column![
         text("Windows").size(24),
-        text(windows_visuals_note),
-        text(
-            "Native window shadow toggling and shadow color are not exposed as \
-             standalone public DWM controls, so this demo leaves the system shadow alone."
-        ),
+        text(windows_version_label(state.windows_capabilities)),
         checkbox(state.chrome.windows.caption)
             .label("Caption")
             .on_toggle(Message::WindowsCaption),
@@ -396,8 +392,8 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         checkbox(state.chrome.macos.fullsize_content_view)
             .label("Full-size content view")
             .on_toggle(Message::MacosFullsize),
-        row![
-            text("Separator").width(Length::Fill),
+        picker_row(
+            "Separator",
             pick_list(
                 MACOS_SEPARATOR_STYLE_CHOICES,
                 Some(MacosSeparatorStyleChoice::from_setting(
@@ -405,47 +401,49 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
                 )),
                 Message::MacosSeparatorStyle,
             )
-            .width(180),
-        ]
-        .spacing(12),
+            .width(180)
+            .into(),
+        ),
         if state.chrome.macos.titlebar || state.chrome.macos.traffic_lights {
-            row![
-                text("Titlebar height").width(Length::Fill),
+            picker_row(
+                "Titlebar height",
                 pick_list(
                     MACOS_TITLEBAR_HEIGHT_CHOICES,
                     Some(MacosTitlebarHeightChoice::from_setting(
-                        state.chrome.macos.titlebar_height
+                        state.chrome.macos.titlebar_height,
                     )),
                     Message::MacosTitlebarHeight,
                 )
-                .width(180),
-            ]
-            .spacing(12)
-            .into()
+                .width(180)
+                .into(),
+            )
         } else {
-            unsupported_setting_row(
+            picker_row(
                 "Titlebar height",
-                "Ignored while both the titlebar and traffic lights are hidden",
+                locked_picker(MacosTitlebarHeightChoice::from_setting(
+                    state.chrome.macos.titlebar_height,
+                )),
             )
         },
         if state.chrome.macos.titlebar || state.chrome.macos.traffic_lights {
-            row![
-                text("Traffic light offset").width(Length::Fill),
+            picker_row(
+                "Traffic light offset",
                 pick_list(
                     MACOS_TRAFFIC_LIGHT_OFFSET_CHOICES,
                     Some(MacosTrafficLightOffsetChoice::from_setting(
-                        state.chrome.macos.traffic_light_offset_y
+                        state.chrome.macos.traffic_light_offset_y,
                     )),
                     Message::MacosTrafficLightOffset,
                 )
-                .width(180),
-            ]
-            .spacing(12)
-            .into()
+                .width(180)
+                .into(),
+            )
         } else {
-            unsupported_setting_row(
+            picker_row(
                 "Traffic light offset",
-                "Ignored while both the titlebar and traffic lights are hidden",
+                locked_picker(MacosTrafficLightOffsetChoice::from_setting(
+                    state.chrome.macos.traffic_light_offset_y,
+                )),
             )
         },
     ]
@@ -453,7 +451,7 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
 
     let linux = column![
         text("Linux").size(24),
-        text("X11-only Motif WM hints. Wayland currently ignores these controls."),
+        text("X11 only"),
         checkbox(state.chrome.linux.decorations)
             .label("Decorations")
             .on_toggle(Message::LinuxDecorations),
@@ -493,11 +491,6 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
 
     let content = column![
         text("iced-window-chrome").size(34),
-        text(
-            "Toggle settings to patch the latest window now, and keep the \
-             subscription installed so any later-opened windows are patched too."
-        )
-        .width(Length::Fill),
         controls,
         platform_section,
     ]
@@ -514,29 +507,30 @@ fn reapply(state: &ChromeLab) -> Task<Message> {
     iced_window_chrome::apply_to_latest(state.chrome.clone())
 }
 
-fn unsupported_setting_row<'a, Message: 'a>(label: &'a str, note: &'a str) -> Element<'a, Message> {
-    row![text(label).width(Length::Fill), text(note),]
+fn picker_row<'a, Message: 'a>(
+    label: &'a str,
+    control: Element<'a, Message>,
+) -> Element<'a, Message> {
+    row![text(label).width(Length::Fill), control]
         .spacing(12)
         .into()
 }
 
-fn windows_support_note(capabilities: WindowsCapabilities) -> String {
-    if capabilities.supports_dwm_visuals() && capabilities.supports_system_backdrop() {
-        format!(
-            "Detected Windows {}. Windows 11 chrome visuals and system backdrop materials are enabled.",
-            capabilities.version
-        )
-    } else if capabilities.supports_dwm_visuals() {
-        format!(
-            "Detected Windows {}. Windows 11 chrome visuals are enabled. System backdrop materials require Windows 11 Build 22621+.",
-            capabilities.version
-        )
-    } else {
-        format!(
-            "Detected Windows {}. Corner rounding, title/border colors, and system backdrop materials need newer Windows 11 APIs.",
-            capabilities.version
-        )
-    }
+fn locked_picker<'a, Message: Clone + 'a>(value: impl ToString) -> Element<'a, Message> {
+    button(
+        row![text(value.to_string()).width(Length::Fill), text("v")]
+            .spacing(8)
+            .width(Length::Fill),
+    )
+    .width(180)
+    .on_press_maybe(None)
+    .into()
+}
+
+fn windows_version_label(capabilities: Option<WindowsCapabilities>) -> String {
+    capabilities
+        .map(|capabilities| format!("Windows {}", capabilities.version))
+        .unwrap_or_else(|| String::from("Windows version unavailable"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

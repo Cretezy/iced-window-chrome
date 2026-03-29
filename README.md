@@ -1,15 +1,15 @@
-# `iced-window-chrome`
+# iced-window-chrome
 
-Native-only window chrome patches for [`iced`](https://github.com/iced-rs/iced).
+Small native window-chrome patches for [`iced`](https://github.com/iced-rs/iced).
 
-This crate stays intentionally small: one library crate, one example app, and a direct runtime integration surface for patching already-created native windows on Windows, macOS, and Linux.
+The crate patches already-created windows. It does not replace the runner or try
+to build a custom window framework.
 
-## Highlights
+## What it does
 
-- Native Windows chrome patching for caption, border, buttons, DWM corner preference, title colors, and Windows 11 system backdrop materials.
-- Native macOS titlebar patching for title visibility, traffic lights, transparency, full-size content view, accessory-driven titlebar height, and traffic-light offsets.
-- Native Linux/X11 patching for Motif WM decorations and close/minimize/maximize hints.
-- `iced`-friendly API with `Task` helpers for live windows and a small subscription loop for later-opened windows.
+- Windows: caption, border, caption buttons, corner preference, caption colors, and Windows 11 backdrop material
+- macOS: titlebar visibility, title text, traffic lights, transparency, full-size content view, titlebar height, traffic-light offset, separator style
+- Linux: X11 Motif WM hints for decorations and close/minimize/maximize buttons
 
 ## Install
 
@@ -19,7 +19,7 @@ iced = "0.14.0"
 iced-window-chrome = { path = "." }
 ```
 
-## Quick Start
+## Basic use
 
 ```rust
 use iced::{Subscription, Task};
@@ -45,33 +45,41 @@ fn update(app: &mut App, message: Message) -> Task<Message> {
 }
 ```
 
-For one-off patching during boot or after startup, use:
+For a one-off patch:
 
 ```rust
 iced_window_chrome::apply_to_latest::<Message>(ChromeSettings::default())
 ```
 
-## Why `subscription` + `handle`?
+`subscription` + `handle` exists because `iced` subscriptions can observe new
+windows, but they cannot directly run `window::run` side effects.
 
-`iced` subscriptions can observe new windows, but they cannot directly execute `window::run` side effects themselves. This crate keeps the integration honest and small by emitting its own event type from `subscription(settings)` and expecting callers to feed that event back into `handle(event)` from their update loop.
-
-## Example App
-
-Run the included demo:
+## Example
 
 ```bash
 cargo run --example chrome-lab
 ```
 
-The demo shows the controls for the current platform, lets you patch the latest live window, and can open extra windows that are patched through the subscription flow.
+The lab only shows controls for the current platform.
 
-## Platform Support
+```bash
+cargo run --example custom_titlebar
+```
+
+`custom_titlebar` shows a single thicker header strategy across platforms:
+Windows keeps the native resize border, macOS keeps native traffic lights, X11
+goes fully custom, and Wayland treats the header as presentation only.
+
+## Platform notes
 
 | Platform | Status | Notes |
 | --- | --- | --- |
-| Windows | Supported | Native style-bit and DWM patching; window shadow customization is not exposed by the public DWM frame APIs |
-| macOS | Supported | AppKit titlebar and traffic-light patching |
-| Linux | Best effort | X11 Motif WM hints for decorations and buttons; Wayland remains a no-op |
+| Windows | Supported | Native style bits and DWM attributes |
+| macOS | Supported | AppKit titlebar patching |
+| Linux | Best effort | X11 only; Wayland is currently a no-op |
+
+Windows shadow color is not supported. The public DWM window-frame APIs do not
+expose a standalone shadow-color control.
 
 ## Development
 
@@ -80,5 +88,3 @@ cargo fmt --all
 cargo check --all-targets
 cargo clippy --all-targets -- -D warnings
 ```
-
-The GitHub Actions workflow runs checks on Linux, Windows, and macOS.
