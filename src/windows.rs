@@ -1,5 +1,5 @@
 use crate::{
-    ChromeSettings, Error, Result, WindowCornerPreference, WindowsCapabilities,
+    ChromeSettings, Error, Result, WindowCornerPreference, WindowsBackdrop, WindowsCapabilities,
     WindowsChromeSettings, WindowsVersion,
 };
 
@@ -13,8 +13,9 @@ use std::ptr::null_mut;
 use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
 use windows_sys::Win32::Foundation::{GetLastError, HWND, STATUS_SUCCESS, SetLastError};
 use windows_sys::Win32::Graphics::Dwm::{
-    DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE,
-    DwmSetWindowAttribute,
+    DWMSBT_AUTO, DWMSBT_MAINWINDOW, DWMSBT_NONE, DWMSBT_TABBEDWINDOW, DWMSBT_TRANSIENTWINDOW,
+    DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_TEXT_COLOR,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DwmSetWindowAttribute,
 };
 use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -48,6 +49,8 @@ pub fn current_capabilities() -> Option<WindowsCapabilities> {
         build: info.dwBuildNumber,
     };
     let supports_dwm_visuals = version.is_windows_11_or_newer();
+    let supports_system_backdrop =
+        version.major > 10 || (version.major == 10 && version.build >= 22_621);
 
     Some(WindowsCapabilities {
         version,
@@ -55,6 +58,7 @@ pub fn current_capabilities() -> Option<WindowsCapabilities> {
         border_color: supports_dwm_visuals,
         title_background_color: supports_dwm_visuals,
         title_text_color: supports_dwm_visuals,
+        system_backdrop: supports_system_backdrop,
     })
 }
 
@@ -179,6 +183,11 @@ unsafe fn apply_dwm_attributes(hwnd: HWND, settings: &WindowsChromeSettings) -> 
         unsafe { set_dwm_attribute(hwnd, DWMWA_TEXT_COLOR as u32, &title_text)? };
     }
 
+    if capabilities.system_backdrop {
+        let backdrop = settings.backdrop.map(backdrop_type).unwrap_or(DWMSBT_AUTO);
+        unsafe { set_dwm_attribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE as u32, &backdrop)? };
+    }
+
     Ok(())
 }
 
@@ -206,4 +215,13 @@ fn with_flag(style: u32, flag: u32, enabled: bool) -> u32 {
 fn colorref(color: Color) -> u32 {
     let [red, green, blue, _] = color.into_rgba8();
     u32::from(red) | (u32::from(green) << 8) | (u32::from(blue) << 16)
+}
+
+fn backdrop_type(backdrop: WindowsBackdrop) -> i32 {
+    match backdrop {
+        WindowsBackdrop::None => DWMSBT_NONE,
+        WindowsBackdrop::Mica => DWMSBT_MAINWINDOW,
+        WindowsBackdrop::Acrylic => DWMSBT_TRANSIENTWINDOW,
+        WindowsBackdrop::MicaAlt => DWMSBT_TABBEDWINDOW,
+    }
 }

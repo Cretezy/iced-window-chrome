@@ -6,7 +6,7 @@ This crate stays intentionally small: one library crate, one example app, and a 
 
 ## Highlights
 
-- Native Windows chrome patching for caption, border, buttons, DWM corner preference, and title colors.
+- Native Windows chrome patching for caption, border, buttons, DWM corner preference, title colors, and Windows 11 system backdrop materials.
 - Native macOS titlebar patching for title visibility, traffic lights, transparency, full-size content view, accessory-driven titlebar height, and traffic-light offsets.
 - Native Linux/X11 patching for Motif WM decorations and close/minimize/maximize hints.
 - `iced`-friendly API with `Task` helpers for live windows and a small subscription loop for later-opened windows.
@@ -63,13 +63,13 @@ Run the included demo:
 cargo run --example chrome-lab
 ```
 
-The demo lets you toggle Windows, macOS, and Linux settings, patch the latest live window, and open extra windows that are patched through the subscription flow.
+The demo shows the controls for the current platform, lets you patch the latest live window, and can open extra windows that are patched through the subscription flow.
 
 ## Platform Support
 
 | Platform | Status | Notes |
 | --- | --- | --- |
-| Windows | Supported | Native style-bit and DWM patching |
+| Windows | Supported | Native style-bit and DWM patching; window shadow customization is not exposed by the public DWM frame APIs |
 | macOS | Supported | AppKit titlebar and traffic-light patching |
 | Linux | Best effort | X11 Motif WM hints for decorations and buttons; Wayland remains a no-op |
 

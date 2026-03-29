@@ -23,7 +23,7 @@ use std::fmt;
 
 pub use settings::{
     CaptionButtons, ChromeSettings, LinuxChromeSettings, MacosChromeSettings,
-    MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsChromeSettings,
+    MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsBackdrop, WindowsChromeSettings,
 };
 
 /// The current Windows runtime version.
@@ -55,6 +55,7 @@ pub struct WindowsCapabilities {
     pub border_color: bool,
     pub title_background_color: bool,
     pub title_text_color: bool,
+    pub system_backdrop: bool,
 }
 
 impl WindowsCapabilities {
@@ -64,6 +65,11 @@ impl WindowsCapabilities {
             && self.border_color
             && self.title_background_color
             && self.title_text_color
+    }
+
+    /// Returns `true` when the newer system backdrop material API is available.
+    pub fn supports_system_backdrop(self) -> bool {
+        self.system_backdrop
     }
 }
 

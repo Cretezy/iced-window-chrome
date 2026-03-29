@@ -44,6 +44,15 @@ pub enum WindowCornerPreference {
     RoundSmall,
 }
 
+/// System-managed Windows backdrop material.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WindowsBackdrop {
+    None,
+    Mica,
+    Acrylic,
+    MicaAlt,
+}
+
 /// Native macOS titlebar separator style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MacosTitlebarSeparatorStyle {
@@ -86,6 +95,7 @@ pub struct WindowsChromeSettings {
     pub border_color: Option<Color>,
     pub title_background_color: Option<Color>,
     pub title_text_color: Option<Color>,
+    pub backdrop: Option<WindowsBackdrop>,
 }
 
 impl Default for WindowsChromeSettings {
@@ -98,6 +108,7 @@ impl Default for WindowsChromeSettings {
             border_color: None,
             title_background_color: None,
             title_text_color: None,
+            backdrop: None,
         }
     }
 }
@@ -111,6 +122,7 @@ impl Hash for WindowsChromeSettings {
         hash_color(self.border_color, state);
         hash_color(self.title_background_color, state);
         hash_color(self.title_text_color, state);
+        self.backdrop.hash(state);
     }
 }
 

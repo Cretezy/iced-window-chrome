@@ -2,7 +2,8 @@ use iced::widget::{button, checkbox, column, container, pick_list, row, scrollab
 use iced::{Color, Element, Length, Size, Subscription, Task, application, window};
 
 use iced_window_chrome::{
-    ChromeSettings, MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsCapabilities,
+    ChromeSettings, MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsBackdrop,
+    WindowsCapabilities,
 };
 
 const WINDOW_CORNER_CHOICES: [WindowCornerChoice; 4] = [
@@ -19,6 +20,14 @@ const WINDOWS_COLOR_CHOICES: [WindowsColorChoice; 6] = [
     WindowsColorChoice::Indigo,
     WindowsColorChoice::Amber,
     WindowsColorChoice::White,
+];
+
+const WINDOWS_BACKDROP_CHOICES: [WindowsBackdropChoice; 5] = [
+    WindowsBackdropChoice::SystemDefault,
+    WindowsBackdropChoice::Off,
+    WindowsBackdropChoice::Mica,
+    WindowsBackdropChoice::Acrylic,
+    WindowsBackdropChoice::MicaAlt,
 ];
 
 const MACOS_TITLEBAR_HEIGHT_CHOICES: [MacosTitlebarHeightChoice; 6] = [
@@ -77,6 +86,7 @@ enum Message {
     WindowsBorderColor(WindowsColorChoice),
     WindowsTitleBackgroundColor(WindowsColorChoice),
     WindowsTitleTextColor(WindowsColorChoice),
+    WindowsBackdrop(WindowsBackdropChoice),
     MacosTitlebar(bool),
     MacosTitle(bool),
     MacosTrafficLights(bool),
@@ -160,6 +170,10 @@ fn update(state: &mut ChromeLab, message: Message) -> Task<Message> {
             state.chrome.windows.title_text_color = value.into_setting();
             reapply(state)
         }
+        Message::WindowsBackdrop(value) => {
+            state.chrome.windows.backdrop = value.into_setting();
+            reapply(state)
+        }
         Message::MacosTitlebar(value) => {
             state.chrome.macos.titlebar = value;
             reapply(state)
@@ -219,6 +233,10 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
     let windows_visuals_supported = state
         .windows_capabilities
         .map(WindowsCapabilities::supports_dwm_visuals)
+        .unwrap_or(false);
+    let windows_backdrop_supported = state
+        .windows_capabilities
+        .map(WindowsCapabilities::supports_system_backdrop)
         .unwrap_or(false);
 
     let windows_visuals_note = state
@@ -310,9 +328,34 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         )
     };
 
+    let backdrop_row: Element<'_, Message> = if windows_backdrop_supported {
+        row![
+            text("Backdrop material").width(Length::Fill),
+            pick_list(
+                WINDOWS_BACKDROP_CHOICES,
+                Some(WindowsBackdropChoice::from_setting(
+                    state.chrome.windows.backdrop
+                )),
+                Message::WindowsBackdrop,
+            )
+            .width(180),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        unsupported_setting_row(
+            "Backdrop material",
+            "Windows 11 Build 22621+ is required for Mica, Acrylic, and Mica Alt",
+        )
+    };
+
     let windows = column![
         text("Windows").size(24),
         text(windows_visuals_note),
+        text(
+            "Native window shadow toggling and shadow color are not exposed as \
+             standalone public DWM controls, so this demo leaves the system shadow alone."
+        ),
         checkbox(state.chrome.windows.caption)
             .label("Caption")
             .on_toggle(Message::WindowsCaption),
@@ -332,6 +375,7 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         border_color_row,
         title_background_row,
         title_text_row,
+        backdrop_row,
     ]
     .spacing(12);
 
@@ -431,6 +475,22 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
     ]
     .spacing(12);
 
+    let platform_section: Element<'_, Message> = if cfg!(target_os = "windows") {
+        windows.width(Length::Fill).into()
+    } else if cfg!(target_os = "macos") {
+        macos.width(Length::Fill).into()
+    } else if cfg!(target_os = "linux") {
+        linux.width(Length::Fill).into()
+    } else {
+        column![
+            text("Unsupported platform").size(24),
+            text("This example currently targets Windows, macOS, and Linux."),
+        ]
+        .spacing(12)
+        .width(Length::Fill)
+        .into()
+    };
+
     let content = column![
         text("iced-window-chrome").size(34),
         text(
@@ -439,8 +499,7 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         )
         .width(Length::Fill),
         controls,
-        row![windows.width(Length::Fill), macos.width(Length::Fill)].spacing(32),
-        linux.width(Length::Fill),
+        platform_section,
     ]
     .spacing(24)
     .padding(24);
@@ -462,14 +521,19 @@ fn unsupported_setting_row<'a, Message: 'a>(label: &'a str, note: &'a str) -> El
 }
 
 fn windows_support_note(capabilities: WindowsCapabilities) -> String {
-    if capabilities.supports_dwm_visuals() {
+    if capabilities.supports_dwm_visuals() && capabilities.supports_system_backdrop() {
         format!(
-            "Detected Windows {}. Windows 11 DWM visual chrome controls are enabled.",
+            "Detected Windows {}. Windows 11 chrome visuals and system backdrop materials are enabled.",
+            capabilities.version
+        )
+    } else if capabilities.supports_dwm_visuals() {
+        format!(
+            "Detected Windows {}. Windows 11 chrome visuals are enabled. System backdrop materials require Windows 11 Build 22621+.",
             capabilities.version
         )
     } else {
         format!(
-            "Detected Windows {}. Corner rounding and DWM title/border colors are Windows 11-only, so those controls are disabled.",
+            "Detected Windows {}. Corner rounding, title/border colors, and system backdrop materials need newer Windows 11 APIs.",
             capabilities.version
         )
     }
@@ -557,6 +621,49 @@ impl std::fmt::Display for WindowsColorChoice {
             Self::Indigo => "Indigo",
             Self::Amber => "Amber",
             Self::White => "White",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsBackdropChoice {
+    SystemDefault,
+    Off,
+    Mica,
+    Acrylic,
+    MicaAlt,
+}
+
+impl WindowsBackdropChoice {
+    fn from_setting(value: Option<WindowsBackdrop>) -> Self {
+        match value {
+            Some(WindowsBackdrop::None) => Self::Off,
+            Some(WindowsBackdrop::Mica) => Self::Mica,
+            Some(WindowsBackdrop::Acrylic) => Self::Acrylic,
+            Some(WindowsBackdrop::MicaAlt) => Self::MicaAlt,
+            None => Self::SystemDefault,
+        }
+    }
+
+    fn into_setting(self) -> Option<WindowsBackdrop> {
+        match self {
+            Self::SystemDefault => None,
+            Self::Off => Some(WindowsBackdrop::None),
+            Self::Mica => Some(WindowsBackdrop::Mica),
+            Self::Acrylic => Some(WindowsBackdrop::Acrylic),
+            Self::MicaAlt => Some(WindowsBackdrop::MicaAlt),
+        }
+    }
+}
+
+impl std::fmt::Display for WindowsBackdropChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SystemDefault => "System default",
+            Self::Off => "Off",
+            Self::Mica => "Mica",
+            Self::Acrylic => "Acrylic",
+            Self::MicaAlt => "Mica Alt",
         })
     }
 }
