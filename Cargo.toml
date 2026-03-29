@@ -1,0 +1,32 @@
+[package]
+name = "iced-window-chrome"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+description = "Native-only window chrome patches for iced on Windows, macOS, and Linux"
+readme = "README.md"
+keywords = ["iced", "gui", "window", "desktop", "native"]
+categories = ["gui"]
+
+[[example]]
+name = "chrome-lab"
+path = "examples/chrome_lab.rs"
+
+[dependencies]
+iced = "0.14.0"
+raw-window-handle = "0.6.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-foundation = "0.3.2"
