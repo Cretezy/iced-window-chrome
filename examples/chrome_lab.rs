@@ -1,7 +1,23 @@
-use iced::widget::{button, checkbox, column, container, row, text};
-use iced::{Element, Length, Size, Subscription, Task, application, window};
+use iced::widget::{button, checkbox, column, container, pick_list, row, text};
+use iced::{Color, Element, Length, Size, Subscription, Task, application, window};
 
-use iced_window_chrome::ChromeSettings;
+use iced_window_chrome::{ChromeSettings, WindowCornerPreference};
+
+const WINDOW_CORNER_CHOICES: [WindowCornerChoice; 4] = [
+    WindowCornerChoice::SystemDefault,
+    WindowCornerChoice::Square,
+    WindowCornerChoice::Round,
+    WindowCornerChoice::RoundSmall,
+];
+
+const WINDOWS_COLOR_CHOICES: [WindowsColorChoice; 6] = [
+    WindowsColorChoice::SystemDefault,
+    WindowsColorChoice::Crimson,
+    WindowsColorChoice::Emerald,
+    WindowsColorChoice::Indigo,
+    WindowsColorChoice::Amber,
+    WindowsColorChoice::White,
+];
 
 fn main() -> iced::Result {
     application(ChromeLab::boot, update, view)
@@ -29,6 +45,10 @@ enum Message {
     WindowsClose(bool),
     WindowsMinimize(bool),
     WindowsMaximize(bool),
+    WindowsCorner(WindowCornerChoice),
+    WindowsBorderColor(WindowsColorChoice),
+    WindowsTitleBackgroundColor(WindowsColorChoice),
+    WindowsTitleTextColor(WindowsColorChoice),
     MacosTitlebar(bool),
     MacosTitle(bool),
     MacosTrafficLights(bool),
@@ -87,6 +107,22 @@ fn update(state: &mut ChromeLab, message: Message) -> Task<Message> {
             state.chrome.windows.buttons.maximize = value;
             reapply(state)
         }
+        Message::WindowsCorner(value) => {
+            state.chrome.windows.corner_preference = value.into_setting();
+            reapply(state)
+        }
+        Message::WindowsBorderColor(value) => {
+            state.chrome.windows.border_color = value.into_setting();
+            reapply(state)
+        }
+        Message::WindowsTitleBackgroundColor(value) => {
+            state.chrome.windows.title_background_color = value.into_setting();
+            reapply(state)
+        }
+        Message::WindowsTitleTextColor(value) => {
+            state.chrome.windows.title_text_color = value.into_setting();
+            reapply(state)
+        }
         Message::MacosTitlebar(value) => {
             state.chrome.macos.titlebar = value;
             reapply(state)
@@ -132,6 +168,54 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
         checkbox(state.chrome.windows.buttons.maximize)
             .label("Maximize button")
             .on_toggle(Message::WindowsMaximize),
+        row![
+            text("Corner rounding").width(Length::Fill),
+            pick_list(
+                WINDOW_CORNER_CHOICES,
+                Some(WindowCornerChoice::from_setting(
+                    state.chrome.windows.corner_preference
+                )),
+                Message::WindowsCorner,
+            )
+            .width(180),
+        ]
+        .spacing(12),
+        row![
+            text("Border color").width(Length::Fill),
+            pick_list(
+                WINDOWS_COLOR_CHOICES,
+                Some(WindowsColorChoice::from_setting(
+                    state.chrome.windows.border_color
+                )),
+                Message::WindowsBorderColor,
+            )
+            .width(180),
+        ]
+        .spacing(12),
+        row![
+            text("Title background").width(Length::Fill),
+            pick_list(
+                WINDOWS_COLOR_CHOICES,
+                Some(WindowsColorChoice::from_setting(
+                    state.chrome.windows.title_background_color
+                )),
+                Message::WindowsTitleBackgroundColor,
+            )
+            .width(180),
+        ]
+        .spacing(12),
+        row![
+            text("Title text").width(Length::Fill),
+            pick_list(
+                WINDOWS_COLOR_CHOICES,
+                Some(WindowsColorChoice::from_setting(
+                    state.chrome.windows.title_text_color
+                )),
+                Message::WindowsTitleTextColor,
+            )
+            .width(180),
+        ]
+        .spacing(12),
     ]
     .spacing(12);
 
@@ -182,4 +266,90 @@ fn view(state: &ChromeLab) -> Element<'_, Message> {
 
 fn reapply(state: &ChromeLab) -> Task<Message> {
     iced_window_chrome::apply_to_latest(state.chrome.clone())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowCornerChoice {
+    SystemDefault,
+    Square,
+    Round,
+    RoundSmall,
+}
+
+impl WindowCornerChoice {
+    fn from_setting(value: Option<WindowCornerPreference>) -> Self {
+        match value {
+            Some(WindowCornerPreference::DoNotRound) => Self::Square,
+            Some(WindowCornerPreference::Round) => Self::Round,
+            Some(WindowCornerPreference::RoundSmall) => Self::RoundSmall,
+            Some(WindowCornerPreference::Default) | None => Self::SystemDefault,
+        }
+    }
+
+    fn into_setting(self) -> Option<WindowCornerPreference> {
+        match self {
+            Self::SystemDefault => None,
+            Self::Square => Some(WindowCornerPreference::DoNotRound),
+            Self::Round => Some(WindowCornerPreference::Round),
+            Self::RoundSmall => Some(WindowCornerPreference::RoundSmall),
+        }
+    }
+}
+
+impl std::fmt::Display for WindowCornerChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SystemDefault => "System default",
+            Self::Square => "Square",
+            Self::Round => "Round",
+            Self::RoundSmall => "Round small",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsColorChoice {
+    SystemDefault,
+    Crimson,
+    Emerald,
+    Indigo,
+    Amber,
+    White,
+}
+
+impl WindowsColorChoice {
+    fn from_setting(value: Option<Color>) -> Self {
+        match value.map(Color::into_rgba8) {
+            Some([184, 50, 88, 255]) => Self::Crimson,
+            Some([20, 184, 166, 255]) => Self::Emerald,
+            Some([99, 102, 241, 255]) => Self::Indigo,
+            Some([245, 158, 11, 255]) => Self::Amber,
+            Some([255, 255, 255, 255]) => Self::White,
+            _ => Self::SystemDefault,
+        }
+    }
+
+    fn into_setting(self) -> Option<Color> {
+        match self {
+            Self::SystemDefault => None,
+            Self::Crimson => Some(Color::from_rgb8(184, 50, 88)),
+            Self::Emerald => Some(Color::from_rgb8(20, 184, 166)),
+            Self::Indigo => Some(Color::from_rgb8(99, 102, 241)),
+            Self::Amber => Some(Color::from_rgb8(245, 158, 11)),
+            Self::White => Some(Color::from_rgb8(255, 255, 255)),
+        }
+    }
+}
+
+impl std::fmt::Display for WindowsColorChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SystemDefault => "System default",
+            Self::Crimson => "Crimson",
+            Self::Emerald => "Emerald",
+            Self::Indigo => "Indigo",
+            Self::Amber => "Amber",
+            Self::White => "White",
+        })
+    }
 }
