@@ -83,6 +83,21 @@ Windows uses a frameless window with custom resize handles, macOS keeps native
 traffic lights and the native resize border, X11 goes fully custom, and
 Wayland treats the header as presentation only.
 
+Screenshots from the `custom_titlebar` demo:
+
+<table>
+  <tr>
+    <td align="center"><strong>Windows 11</strong></td>
+    <td align="center"><strong>macOS</strong></td>
+    <td align="center"><strong>Manjaro XFCE (X11)</strong></td>
+  </tr>
+  <tr>
+    <td><img src="assets/Windows11-Titlebar-Example.png" alt="custom_titlebar demo on Windows 11" width="100%"></td>
+    <td><img src="assets/macOS-Titlebar-Example.png" alt="custom_titlebar demo on macOS" width="100%"></td>
+    <td><img src="assets/ManjaroXFCE(X11)-Titlebar-Example.png" alt="custom_titlebar demo on Manjaro XFCE X11" width="100%"></td>
+  </tr>
+</table>
+
 ## Platform notes
 
 | Platform | Status | Notes |
