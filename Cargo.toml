@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-publish = false
 description = "Native-only window chrome patches for iced on Windows, macOS, and Linux"
 readme = "README.md"
+repository = "https://github.com/HunterDeVillez/iced-window-chrome"
+documentation = "https://docs.rs/iced-window-chrome"
 keywords = ["iced", "gui", "window", "desktop", "native"]
 categories = ["gui"]
 
