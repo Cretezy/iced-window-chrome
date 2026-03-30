@@ -28,8 +28,12 @@ to build a custom window framework.
 ```toml
 [dependencies]
 iced = "0.14.0"
-iced-window-chrome = { path = "." }
+iced-window-chrome = "0.1.0"
 ```
+
+Crate page: https://crates.io/crates/iced-window-chrome
+
+API docs: https://docs.rs/iced-window-chrome
 
 ## Basic use
 
