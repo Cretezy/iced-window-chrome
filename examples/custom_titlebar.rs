@@ -7,14 +7,14 @@ use iced::{
 };
 
 use iced_window_chrome::{
-    CaptionButtons, ChromeSettings, Event, MacosTitlebarSeparatorStyle, WindowCornerPreference,
-    WindowsBackdrop, current_windows_capabilities,
+    ChromeSettings, Event, MacosTitlebarSeparatorStyle, WindowCornerPreference, WindowsBackdrop,
+    current_windows_capabilities,
 };
 
-const TITLEBAR_HEIGHT: f32 = 68.0;
-const TITLEBAR_HEIGHT_F64: f64 = 68.0;
-const MACOS_TRAFFIC_LIGHT_OFFSET: f64 = 15.0;
-const X11_RESIZE_GUTTER: f32 = 8.0;
+const TITLEBAR_HEIGHT: f32 = 62.0;
+const TITLEBAR_HEIGHT_F64: f64 = 62.0;
+const MACOS_TRAFFIC_LIGHT_OFFSET: f64 = -15.0;
+const RESIZE_GUTTER: f32 = 8.0;
 const MIN_WINDOW_WIDTH: f32 = 760.0;
 const MIN_WINDOW_HEIGHT: f32 = 520.0;
 
@@ -94,7 +94,7 @@ fn update(state: &mut CustomTitlebarDemo, message: Message) -> Task<Message> {
         Message::ResizeHover(direction) => state
             .window_id
             .filter(|_| state.platform.uses_custom_resize_handles())
-            .map(|id| set_x11_resize_cursor(id, direction))
+            .map(|id| set_resize_hover_cursor(id, direction))
             .unwrap_or_else(Task::none),
         Message::StartWindowDrag => state
             .window_id
@@ -160,7 +160,7 @@ fn custom_resize_shell(state: &CustomTitlebarDemo) -> Element<'_, Message> {
 }
 
 fn custom_resize_overlay() -> Element<'static, Message> {
-    let gutter = Length::Fixed(X11_RESIZE_GUTTER);
+    let gutter = Length::Fixed(RESIZE_GUTTER);
 
     column![
         row![
@@ -221,7 +221,7 @@ fn resize_interaction(direction: window::Direction) -> mouse::Interaction {
 }
 
 #[cfg(target_os = "linux")]
-fn set_x11_resize_cursor<Message>(
+fn set_resize_hover_cursor<Message>(
     id: window::Id,
     direction: Option<window::Direction>,
 ) -> Task<Message>
@@ -235,7 +235,7 @@ where
 }
 
 #[cfg(not(target_os = "linux"))]
-fn set_x11_resize_cursor<Message>(
+fn set_resize_hover_cursor<Message>(
     _id: window::Id,
     _direction: Option<window::Direction>,
 ) -> Task<Message>
@@ -327,10 +327,8 @@ fn titlebar(state: &CustomTitlebarDemo) -> Element<'_, Message> {
 
     let drag_content = row![
         title_label(),
-        tab_chip("Overview"),
-        tab_chip("Native edges"),
-        tab_chip("Unified layout"),
-        status_pill(state.platform.header_note()),
+        Space::new().width(Length::Fill),
+        status_pill(state.platform.label())
     ]
     .spacing(10)
     .align_y(alignment::Vertical::Center)
@@ -356,9 +354,9 @@ fn titlebar(state: &CustomTitlebarDemo) -> Element<'_, Message> {
 
     let buttons: Element<'_, Message> = if state.platform.shows_custom_caption_buttons() {
         row![
-            caption_button("min", Message::Minimize, false),
-            caption_button("max", Message::ToggleMaximize, false),
-            caption_button("x", Message::Close, true),
+            caption_button(CaptionGlyph::Minimize, Message::Minimize, false),
+            caption_button(CaptionGlyph::Maximize, Message::ToggleMaximize, false),
+            caption_button(CaptionGlyph::Close, Message::Close, true),
         ]
         .spacing(8)
         .align_y(alignment::Vertical::Center)
@@ -385,23 +383,17 @@ fn content(state: &CustomTitlebarDemo) -> Element<'_, Message> {
         hero_card(state),
         row![
             info_card(
-                "What stays native",
+                "Native",
                 state.platform.native_edges(),
                 Color::from_rgb8(234, 162, 86),
             ),
             info_card(
-                "What we draw",
+                "Custom",
                 state.platform.custom_layers(),
                 Color::from_rgb8(92, 154, 138),
             ),
         ]
         .spacing(18),
-        info_card(
-            "Why this example exists",
-            "It shows a single visual titlebar that adapts to each platform instead \
-             of pretending every window system behaves the same.",
-            Color::from_rgb8(108, 124, 168),
-        ),
     ]
     .spacing(18)
     .padding([18, 18]);
@@ -412,20 +404,14 @@ fn content(state: &CustomTitlebarDemo) -> Element<'_, Message> {
 fn hero_card(state: &CustomTitlebarDemo) -> Element<'_, Message> {
     let summary = match state.platform {
         PlatformFlavor::Windows => {
-            "Windows uses a frameless window, keeps native snap behavior, and adds invisible resize handles around the custom titlebar shell."
+            "Windows uses a frameless window with custom controls and app-drawn resize handles."
         }
         PlatformFlavor::Macos => {
-            "macOS keeps native traffic lights, shifts the layout right, and uses a taller transparent titlebar."
+            "macOS keeps the traffic lights and native resize border while matching the same header layout."
         }
-        PlatformFlavor::LinuxX11 => {
-            "X11 uses an undecorated window, draws its own controls, and forwards resize drags back to the window manager."
-        }
-        PlatformFlavor::LinuxWayland => {
-            "Wayland keeps this as a visual header only. Dragging and caption buttons stay out of the custom bar."
-        }
-        PlatformFlavor::Other => {
-            "Unsupported platforms fall back to the visual shell without native chrome changes."
-        }
+        PlatformFlavor::LinuxX11 => "X11 draws the whole header and resize handles in the app.",
+        PlatformFlavor::LinuxWayland => "Wayland keeps the header visual-only.",
+        PlatformFlavor::Other => "Unsupported platforms fall back to the shared header layout.",
     };
 
     container(
@@ -435,16 +421,9 @@ fn hero_card(state: &CustomTitlebarDemo) -> Element<'_, Message> {
                 .color(Color::from_rgb8(35, 30, 25)),
             text(summary).size(18).color(Color::from_rgb8(90, 82, 72)),
             row![
-                metric_chip("Header height", "68 px"),
+                metric_chip("Header height", "62 px"),
                 metric_chip("Platform", state.platform.label()),
-                metric_chip(
-                    "Drag bar",
-                    if state.platform.can_drag_titlebar() {
-                        "enabled"
-                    } else {
-                        "visual only"
-                    },
-                ),
+                metric_chip("Resize", state.platform.resize_mode()),
             ]
             .spacing(10),
         ]
@@ -477,13 +456,6 @@ fn title_label<'a>() -> Element<'a, Message> {
         .into()
 }
 
-fn tab_chip<'a>(label: &'a str) -> Element<'a, Message> {
-    container(text(label).size(15).color(Color::from_rgb8(229, 222, 211)))
-        .padding([8, 12])
-        .style(|_| tab_style())
-        .into()
-}
-
 fn status_pill<'a>(label: &'a str) -> Element<'a, Message> {
     container(text(label).size(14).color(Color::from_rgb8(232, 238, 231)))
         .padding([8, 12])
@@ -504,13 +476,50 @@ fn metric_chip<'a>(label: &'a str, value: &'a str) -> Element<'a, Message> {
     .into()
 }
 
-fn caption_button<'a>(label: &'a str, message: Message, danger: bool) -> Element<'a, Message> {
-    button(text(label).size(14))
+#[derive(Debug, Clone, Copy)]
+enum CaptionGlyph {
+    Minimize,
+    Maximize,
+    Close,
+}
+
+fn caption_button(
+    glyph: CaptionGlyph,
+    message: Message,
+    danger: bool,
+) -> Element<'static, Message> {
+    button(caption_glyph(glyph))
         .width(40)
         .height(30)
         .padding(0)
         .style(move |_, status| caption_button_style(status, danger))
         .on_press(message)
+        .into()
+}
+
+fn caption_glyph(glyph: CaptionGlyph) -> Element<'static, Message> {
+    const GLYPH: Color = Color::from_rgb8(245, 241, 233);
+
+    let icon: Element<'static, Message> = match glyph {
+        CaptionGlyph::Minimize => container(Space::new().width(12).height(2))
+            .style(|_| {
+                iced::widget::container::Style::default().background(Background::Color(GLYPH))
+            })
+            .into(),
+        CaptionGlyph::Maximize => container(Space::new().width(10).height(10))
+            .style(|_| {
+                iced::widget::container::Style::default()
+                    .border(Border::default().color(GLYPH).width(1))
+            })
+            .into(),
+        CaptionGlyph::Close => text("x").size(15).color(GLYPH).into(),
+    };
+
+    container(icon)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x(Length::Fill)
+        .center_y(Length::Fill)
         .into()
 }
 
@@ -557,16 +566,6 @@ fn card_style(background: Color) -> iced::widget::container::Style {
 fn accented_card_style(accent: Color) -> iced::widget::container::Style {
     card_style(Color::from_rgb8(252, 249, 243))
         .border(Border::default().color(accent.scale_alpha(0.6)).width(1))
-}
-
-fn tab_style() -> iced::widget::container::Style {
-    iced::widget::container::Style::default()
-        .background(Color::from_rgba8(255, 255, 255, 0.08))
-        .border(
-            Border::default()
-                .color(Color::from_rgba8(255, 255, 255, 0.12))
-                .width(1),
-        )
 }
 
 fn status_style() -> iced::widget::container::Style {
@@ -664,11 +663,6 @@ impl PlatformFlavor {
             }
             Self::LinuxX11 => {
                 chrome.linux.decorations = false;
-                chrome.linux.buttons = CaptionButtons {
-                    close: false,
-                    minimize: false,
-                    maximize: false,
-                };
             }
             Self::LinuxWayland | Self::Other => {}
         }
@@ -686,30 +680,16 @@ impl PlatformFlavor {
         }
     }
 
-    fn header_note(self) -> &'static str {
-        match self {
-            Self::Windows => "custom drag bar + resize overlay",
-            Self::Macos => "native traffic lights preserved",
-            Self::LinuxX11 => "fully custom header + resize overlay",
-            Self::LinuxWayland => "header only",
-            Self::Other => "visual shell",
-        }
-    }
-
     fn native_edges(self) -> &'static str {
         match self {
             Self::Windows => {
-                "Windows still handles the actual move, resize, and snap behavior, but the edge hit regions are provided by the app."
+                "Windows still handles drag and snap, but resize comes from the app's edge handles."
             }
-            Self::Macos => {
-                "The traffic lights stay native and keep their hover behavior. The content is shifted right so the header does not collide with them."
-            }
+            Self::Macos => "macOS keeps the traffic lights and the native resize border.",
             Self::LinuxX11 => {
-                "The window manager still performs the actual move and resize operations, but the app provides the drag regions, resize edges, and caption buttons."
+                "X11 uses app-provided drag regions, caption buttons, and resize handles."
             }
-            Self::LinuxWayland => {
-                "Wayland keeps the compositor in charge. The custom bar is just part of the app content."
-            }
+            Self::LinuxWayland => "Wayland keeps the compositor in charge.",
             Self::Other => "No native chrome patch is applied here.",
         }
     }
@@ -717,18 +697,24 @@ impl PlatformFlavor {
     fn custom_layers(self) -> &'static str {
         match self {
             Self::Windows => {
-                "Drag surface, app branding, tabs, caption buttons, and invisible resize handles are drawn in iced."
+                "Header UI, caption buttons, and invisible resize handles are drawn in iced."
             }
             Self::Macos => {
-                "The thick titlebar is drawn in iced while AppKit still owns the traffic lights."
+                "Header UI is drawn in iced while AppKit owns the traffic lights and resize border."
             }
             Self::LinuxX11 => {
-                "The header visuals, caption buttons, drag surface, and invisible resize handles are all drawn in iced."
+                "Header UI, caption buttons, and invisible resize handles are drawn in iced."
             }
-            Self::LinuxWayland => {
-                "The layout stays visually unified, but it avoids fake window controls."
-            }
+            Self::LinuxWayland => "The shared header visuals stay in iced.",
             Self::Other => "The demo still renders the shared header UI.",
+        }
+    }
+
+    fn resize_mode(self) -> &'static str {
+        match self {
+            Self::Macos => "native",
+            Self::Windows | Self::LinuxX11 => "custom",
+            Self::LinuxWayland | Self::Other => "none",
         }
     }
 
