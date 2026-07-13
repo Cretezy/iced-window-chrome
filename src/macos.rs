@@ -4,8 +4,8 @@ use objc2::rc::Retained;
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSButton, NSLayoutAttribute, NSTitlebarAccessoryViewController, NSTitlebarSeparatorStyle,
-    NSView, NSWindow, NSWindowButton, NSWindowDidUpdateNotification, NSWindowStyleMask,
-    NSWindowTitleVisibility,
+    NSView, NSViewDidUpdateTrackingAreasNotification, NSViewFrameDidChangeNotification, NSWindow,
+    NSWindowButton, NSWindowDidUpdateNotification, NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{NSNotification, NSNotificationCenter, NSObject, NSPoint, NSSize};
@@ -26,6 +26,7 @@ struct TrafficLightOffsetObserverIvars {
     button: Retained<NSButton>,
     expected_y: Cell<CGFloat>,
     adjusting: Cell<bool>,
+    posts_frame_changed_notifications: bool,
 }
 
 define_class!(
@@ -48,10 +49,14 @@ impl TrafficLightOffsetObserver {
         expected_y: CGFloat,
         mtm: MainThreadMarker,
     ) -> Retained<Self> {
+        let posts_frame_changed_notifications = button.postsFrameChangedNotifications();
+        button.setPostsFrameChangedNotifications(true);
+
         let this = Self::alloc(mtm).set_ivars(TrafficLightOffsetObserverIvars {
             button,
             expected_y: Cell::new(expected_y),
             adjusting: Cell::new(false),
+            posts_frame_changed_notifications,
         });
         // SAFETY: NSObject's `init` method has the expected signature.
         unsafe { msg_send![super(this), init] }
@@ -247,12 +252,30 @@ fn update_traffic_light_observer(
                     Some(NSWindowDidUpdateNotification),
                     Some(window),
                 );
+                notification_center.addObserver_selector_name_object(
+                    &observer,
+                    sel!(trafficLightWindowDidUpdate:),
+                    Some(NSViewDidUpdateTrackingAreasNotification),
+                    Some(button),
+                );
+                notification_center.addObserver_selector_name_object(
+                    &observer,
+                    sel!(trafficLightWindowDidUpdate:),
+                    Some(NSViewFrameDidChangeNotification),
+                    Some(button),
+                );
             }
             observers.insert(button_key, observer);
         } else if let Some(observer) = observers.remove(&button_key) {
             // SAFETY: This observer was registered with this notification center above.
             unsafe {
                 NSNotificationCenter::defaultCenter().removeObserver(&observer);
+            }
+            if !observer.ivars().posts_frame_changed_notifications {
+                observer
+                    .ivars()
+                    .button
+                    .setPostsFrameChangedNotifications(false);
             }
         }
     });
