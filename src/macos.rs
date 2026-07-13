@@ -1,15 +1,16 @@
 use crate::{ChromeSettings, Error, MacosChromeSettings, MacosTitlebarSeparatorStyle, Result};
 
-use objc2::MainThreadMarker;
 use objc2::rc::Retained;
+use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSLayoutAttribute, NSTitlebarAccessoryViewController, NSTitlebarSeparatorStyle, NSView,
-    NSWindow, NSWindowButton, NSWindowStyleMask, NSWindowTitleVisibility,
+    NSButton, NSLayoutAttribute, NSTitlebarAccessoryViewController, NSTitlebarSeparatorStyle,
+    NSView, NSWindow, NSWindowButton, NSWindowDidUpdateNotification, NSWindowStyleMask,
+    NSWindowTitleVisibility,
 };
 use objc2_core_foundation::CGFloat;
-use objc2_foundation::{NSPoint, NSSize};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSObject, NSPoint, NSSize};
 use raw_window_handle::AppKitWindowHandle;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 const OFFSET_EPSILON: CGFloat = 0.001;
@@ -17,6 +18,59 @@ const OFFSET_EPSILON: CGFloat = 0.001;
 thread_local! {
     static TRAFFIC_LIGHT_OFFSETS: RefCell<HashMap<usize, TrafficLightOffsetState>> =
         RefCell::new(HashMap::new());
+    static TRAFFIC_LIGHT_OBSERVERS:
+        RefCell<HashMap<usize, Retained<TrafficLightOffsetObserver>>> = RefCell::new(HashMap::new());
+}
+
+struct TrafficLightOffsetObserverIvars {
+    button: Retained<NSButton>,
+    expected_y: Cell<CGFloat>,
+    adjusting: Cell<bool>,
+}
+
+define_class!(
+    #[unsafe(super = NSObject)]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = TrafficLightOffsetObserverIvars]
+    struct TrafficLightOffsetObserver;
+
+    impl TrafficLightOffsetObserver {
+        #[unsafe(method(trafficLightWindowDidUpdate:))]
+        fn traffic_light_window_did_update(&self, _notification: &NSNotification) {
+            self.restore_expected_position();
+        }
+    }
+);
+
+impl TrafficLightOffsetObserver {
+    fn new(
+        button: Retained<NSButton>,
+        expected_y: CGFloat,
+        mtm: MainThreadMarker,
+    ) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(TrafficLightOffsetObserverIvars {
+            button,
+            expected_y: Cell::new(expected_y),
+            adjusting: Cell::new(false),
+        });
+        // SAFETY: NSObject's `init` method has the expected signature.
+        unsafe { msg_send![super(this), init] }
+    }
+
+    fn restore_expected_position(&self) {
+        if self.ivars().adjusting.replace(true) {
+            return;
+        }
+
+        let frame = self.ivars().button.frame();
+        let expected_y = self.ivars().expected_y.get();
+        if (frame.origin.y - expected_y).abs() > OFFSET_EPSILON {
+            self.ivars()
+                .button
+                .setFrameOrigin(NSPoint::new(frame.origin.x, expected_y));
+        }
+        self.ivars().adjusting.set(false);
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,7 +92,7 @@ pub fn apply(handle: AppKitWindowHandle, settings: &ChromeSettings) -> Result<()
     apply_style_mask(&ns_window, settings);
     apply_title_visibility(&ns_window, settings);
     apply_titlebar_accessory(&ns_window, settings, mtm);
-    apply_traffic_lights(&ns_window, settings);
+    apply_traffic_lights(&ns_window, settings, mtm);
 
     Ok(())
 }
@@ -72,7 +126,7 @@ fn apply_title_visibility(window: &NSWindow, settings: &ChromeSettings) {
     window.setTitleVisibility(visibility);
 }
 
-fn apply_traffic_lights(window: &NSWindow, settings: &ChromeSettings) {
+fn apply_traffic_lights(window: &NSWindow, settings: &ChromeSettings, mtm: MainThreadMarker) {
     let chrome = &settings.macos;
 
     if let Some(content_view) = window.contentView() {
@@ -94,7 +148,7 @@ fn apply_traffic_lights(window: &NSWindow, settings: &ChromeSettings) {
                 None
             };
 
-            apply_traffic_light_offset(&button, offset_y);
+            apply_traffic_light_offset(&button, offset_y, window, mtm);
         }
     }
 }
@@ -147,15 +201,61 @@ fn apply_titlebar_accessory(window: &NSWindow, settings: &ChromeSettings, mtm: M
     window.addTitlebarAccessoryViewController(&controller);
 }
 
-fn apply_traffic_light_offset(button: &objc2_app_kit::NSButton, offset_y: Option<f64>) {
-    let button_key = button as *const objc2_app_kit::NSButton as usize;
+fn apply_traffic_light_offset(
+    button: &Retained<NSButton>,
+    offset_y: Option<f64>,
+    window: &NSWindow,
+    mtm: MainThreadMarker,
+) {
+    let button_key = Retained::as_ptr(button) as usize;
     let current_origin = button.frame().origin;
     let target_offset_y = offset_y.unwrap_or_default() as CGFloat;
     let baseline_y = tracked_baseline(button_key, current_origin.y);
+    let expected_y = baseline_y + target_offset_y;
 
-    button.setFrameOrigin(NSPoint::new(current_origin.x, baseline_y + target_offset_y));
+    update_traffic_light_observer(button, offset_y.map(|_| expected_y), window, mtm);
+    button.setFrameOrigin(NSPoint::new(current_origin.x, expected_y));
 
     store_tracked_offset(button_key, baseline_y, target_offset_y);
+}
+
+fn update_traffic_light_observer(
+    button: &Retained<NSButton>,
+    expected_y: Option<CGFloat>,
+    window: &NSWindow,
+    mtm: MainThreadMarker,
+) {
+    let button_key = Retained::as_ptr(button) as usize;
+
+    TRAFFIC_LIGHT_OBSERVERS.with(|observers| {
+        let mut observers = observers.borrow_mut();
+
+        if let Some(expected_y) = expected_y {
+            if let Some(observer) = observers.get(&button_key) {
+                observer.ivars().expected_y.set(expected_y);
+                return;
+            }
+
+            let observer = TrafficLightOffsetObserver::new(button.clone(), expected_y, mtm);
+            // SAFETY: The selector is implemented by TrafficLightOffsetObserver and the
+            // observed object is the NSWindow passed by the live AppKit window.
+            unsafe {
+                let notification_center = NSNotificationCenter::defaultCenter();
+                notification_center.addObserver_selector_name_object(
+                    &observer,
+                    sel!(trafficLightWindowDidUpdate:),
+                    Some(NSWindowDidUpdateNotification),
+                    Some(window),
+                );
+            }
+            observers.insert(button_key, observer);
+        } else if let Some(observer) = observers.remove(&button_key) {
+            // SAFETY: This observer was registered with this notification center above.
+            unsafe {
+                NSNotificationCenter::defaultCenter().removeObserver(&observer);
+            }
+        }
+    });
 }
 
 fn tracked_baseline(view_key: usize, current_y: CGFloat) -> CGFloat {
