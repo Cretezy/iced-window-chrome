@@ -107,8 +107,10 @@ fn apply_style_mask(window: &NSWindow, settings: &ChromeSettings) {
     let mut style = window.styleMask();
 
     // AppKit is happier if live windows stay titled; we hide the titlebar
-    // visually instead of stripping the style bit after creation.
-    style.insert(NSWindowStyleMask::Titled);
+    // visually instead of stripping the style bit after creation. Borderless
+    // windows do not include `Closable` in their initial style mask, so add it
+    // back when restoring the native titlebar buttons.
+    style.insert(NSWindowStyleMask::Titled | NSWindowStyleMask::Closable);
 
     if uses_fullsize_content_view(chrome) {
         style.insert(NSWindowStyleMask::FullSizeContentView);
