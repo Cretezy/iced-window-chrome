@@ -24,6 +24,7 @@ thread_local! {
 
 struct TrafficLightOffsetObserverIvars {
     button: Retained<NSButton>,
+    expected_x: Cell<CGFloat>,
     expected_y: Cell<CGFloat>,
     adjusting: Cell<bool>,
     posts_frame_changed_notifications: bool,
@@ -46,6 +47,7 @@ define_class!(
 impl TrafficLightOffsetObserver {
     fn new(
         button: Retained<NSButton>,
+        expected_x: CGFloat,
         expected_y: CGFloat,
         mtm: MainThreadMarker,
     ) -> Retained<Self> {
@@ -54,6 +56,7 @@ impl TrafficLightOffsetObserver {
 
         let this = Self::alloc(mtm).set_ivars(TrafficLightOffsetObserverIvars {
             button,
+            expected_x: Cell::new(expected_x),
             expected_y: Cell::new(expected_y),
             adjusting: Cell::new(false),
             posts_frame_changed_notifications,
@@ -68,11 +71,14 @@ impl TrafficLightOffsetObserver {
         }
 
         let frame = self.ivars().button.frame();
+        let expected_x = self.ivars().expected_x.get();
         let expected_y = self.ivars().expected_y.get();
-        if (frame.origin.y - expected_y).abs() > OFFSET_EPSILON {
+        if (frame.origin.x - expected_x).abs() > OFFSET_EPSILON
+            || (frame.origin.y - expected_y).abs() > OFFSET_EPSILON
+        {
             self.ivars()
                 .button
-                .setFrameOrigin(NSPoint::new(frame.origin.x, expected_y));
+                .setFrameOrigin(NSPoint::new(expected_x, expected_y));
         }
         self.ivars().adjusting.set(false);
     }
@@ -80,7 +86,9 @@ impl TrafficLightOffsetObserver {
 
 #[derive(Debug, Clone, Copy)]
 struct TrafficLightOffsetState {
+    baseline_x: CGFloat,
     baseline_y: CGFloat,
+    last_offset_x: CGFloat,
     last_offset_y: CGFloat,
 }
 
@@ -149,13 +157,13 @@ fn apply_traffic_lights(window: &NSWindow, settings: &ChromeSettings, mtm: MainT
     for button_kind in buttons {
         if let Some(button) = window.standardWindowButton(button_kind) {
             button.setHidden(!chrome.traffic_lights);
-            let offset_y = if chrome.traffic_lights {
-                chrome.traffic_light_offset_y
+            let (offset_x, offset_y) = if chrome.traffic_lights {
+                (chrome.traffic_light_offset_x, chrome.traffic_light_offset_y)
             } else {
-                None
+                (None, None)
             };
 
-            apply_traffic_light_offset(&button, offset_y, window, mtm);
+            apply_traffic_light_offset(&button, offset_x, offset_y, window, mtm);
         }
     }
 }
@@ -210,25 +218,40 @@ fn apply_titlebar_accessory(window: &NSWindow, settings: &ChromeSettings, mtm: M
 
 fn apply_traffic_light_offset(
     button: &Retained<NSButton>,
+    offset_x: Option<f64>,
     offset_y: Option<f64>,
     window: &NSWindow,
     mtm: MainThreadMarker,
 ) {
     let button_key = Retained::as_ptr(button) as usize;
     let current_origin = button.frame().origin;
+    let target_offset_x = offset_x.unwrap_or_default() as CGFloat;
     let target_offset_y = offset_y.unwrap_or_default() as CGFloat;
+    let baseline_x = tracked_baseline_x(button_key, current_origin.x);
     let baseline_y = tracked_baseline(button_key, current_origin.y);
+    let expected_x = baseline_x + target_offset_x;
     let expected_y = baseline_y + target_offset_y;
 
-    update_traffic_light_observer(button, offset_y.map(|_| expected_y), window, mtm);
-    button.setFrameOrigin(NSPoint::new(current_origin.x, expected_y));
+    update_traffic_light_observer(
+        button,
+        offset_x.or(offset_y).map(|_| (expected_x, expected_y)),
+        window,
+        mtm,
+    );
+    button.setFrameOrigin(NSPoint::new(expected_x, expected_y));
 
-    store_tracked_offset(button_key, baseline_y, target_offset_y);
+    store_tracked_offset(
+        button_key,
+        baseline_x,
+        baseline_y,
+        target_offset_x,
+        target_offset_y,
+    );
 }
 
 fn update_traffic_light_observer(
     button: &Retained<NSButton>,
-    expected_y: Option<CGFloat>,
+    expected_position: Option<(CGFloat, CGFloat)>,
     window: &NSWindow,
     mtm: MainThreadMarker,
 ) {
@@ -237,13 +260,15 @@ fn update_traffic_light_observer(
     TRAFFIC_LIGHT_OBSERVERS.with(|observers| {
         let mut observers = observers.borrow_mut();
 
-        if let Some(expected_y) = expected_y {
+        if let Some((expected_x, expected_y)) = expected_position {
             if let Some(observer) = observers.get(&button_key) {
+                observer.ivars().expected_x.set(expected_x);
                 observer.ivars().expected_y.set(expected_y);
                 return;
             }
 
-            let observer = TrafficLightOffsetObserver::new(button.clone(), expected_y, mtm);
+            let observer =
+                TrafficLightOffsetObserver::new(button.clone(), expected_x, expected_y, mtm);
             // SAFETY: The selector is implemented by TrafficLightOffsetObserver and the
             // observed object is the NSWindow passed by the live AppKit window.
             unsafe {
@@ -284,39 +309,66 @@ fn update_traffic_light_observer(
 }
 
 fn tracked_baseline(view_key: usize, current_y: CGFloat) -> CGFloat {
+    tracked_baseline_axis(view_key, current_y, |state| {
+        (state.baseline_y, state.last_offset_y)
+    })
+}
+
+fn tracked_baseline_x(view_key: usize, current_x: CGFloat) -> CGFloat {
+    tracked_baseline_axis(view_key, current_x, |state| {
+        (state.baseline_x, state.last_offset_x)
+    })
+}
+
+fn tracked_baseline_axis(
+    view_key: usize,
+    current: CGFloat,
+    axis: impl Fn(TrafficLightOffsetState) -> (CGFloat, CGFloat),
+) -> CGFloat {
     TRAFFIC_LIGHT_OFFSETS.with(|states| {
         let states = states.borrow();
 
         match states.get(&view_key).copied() {
-            Some(previous) => infer_baseline_y(current_y, previous),
-            None => current_y,
+            Some(previous) => {
+                let (baseline, last_offset) = axis(previous);
+                infer_baseline(current, baseline, last_offset)
+            }
+            None => current,
         }
     })
 }
 
-fn infer_baseline_y(current_y: CGFloat, previous: TrafficLightOffsetState) -> CGFloat {
-    let preserved_y = previous.baseline_y + previous.last_offset_y;
-    let preserved_distance = (current_y - preserved_y).abs();
-    let baseline_distance = (current_y - previous.baseline_y).abs();
+fn infer_baseline(current: CGFloat, baseline: CGFloat, last_offset: CGFloat) -> CGFloat {
+    let preserved = baseline + last_offset;
+    let preserved_distance = (current - preserved).abs();
+    let baseline_distance = (current - baseline).abs();
 
     if preserved_distance <= baseline_distance {
-        current_y - previous.last_offset_y
+        current - last_offset
     } else {
-        current_y
+        current
     }
 }
 
-fn store_tracked_offset(view_key: usize, baseline_y: CGFloat, target_offset_y: CGFloat) {
+fn store_tracked_offset(
+    view_key: usize,
+    baseline_x: CGFloat,
+    baseline_y: CGFloat,
+    target_offset_x: CGFloat,
+    target_offset_y: CGFloat,
+) {
     TRAFFIC_LIGHT_OFFSETS.with(|states| {
         let mut states = states.borrow_mut();
 
-        if target_offset_y.abs() <= OFFSET_EPSILON {
+        if target_offset_x.abs() <= OFFSET_EPSILON && target_offset_y.abs() <= OFFSET_EPSILON {
             states.remove(&view_key);
         } else {
             states.insert(
                 view_key,
                 TrafficLightOffsetState {
+                    baseline_x,
                     baseline_y,
+                    last_offset_x: target_offset_x,
                     last_offset_y: target_offset_y,
                 },
             );

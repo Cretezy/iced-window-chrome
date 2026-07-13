@@ -135,6 +135,7 @@ pub struct MacosChromeSettings {
     pub titlebar_transparent: bool,
     pub fullsize_content_view: bool,
     pub titlebar_height: Option<f64>,
+    pub traffic_light_offset_x: Option<f64>,
     pub traffic_light_offset_y: Option<f64>,
     pub titlebar_separator_style: Option<MacosTitlebarSeparatorStyle>,
 }
@@ -148,6 +149,7 @@ impl Default for MacosChromeSettings {
             titlebar_transparent: false,
             fullsize_content_view: false,
             titlebar_height: None,
+            traffic_light_offset_x: None,
             traffic_light_offset_y: None,
             titlebar_separator_style: None,
         }
@@ -162,6 +164,7 @@ impl Hash for MacosChromeSettings {
         self.titlebar_transparent.hash(state);
         self.fullsize_content_view.hash(state);
         hash_f64(self.titlebar_height, state);
+        hash_f64(self.traffic_light_offset_x, state);
         hash_f64(self.traffic_light_offset_y, state);
         self.titlebar_separator_style.hash(state);
     }
